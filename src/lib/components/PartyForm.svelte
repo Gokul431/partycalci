@@ -1,0 +1,72 @@
+<script lang="ts">
+	import type { PartyInput } from '$lib/types';
+	import { STATUS_OPTIONS } from '$lib/types';
+	import { validateParty, type FieldErrors, type PartyField } from '$lib/utils/validation';
+	import { friendlyError } from '$lib/utils/errors';
+	import { toast } from '$lib/stores/toast.svelte';
+
+	let {
+		initial,
+		submitLabel = 'Save Party',
+		cancelHref,
+		onsubmit
+	}: {
+		initial?: PartyInput;
+		submitLabel?: string;
+		cancelHref: string;
+		onsubmit: (input: PartyInput) => Promise<void>;
+	} = $props();
+
+	// svelte-ignore state_referenced_locally
+	let values = $state<PartyInput>({ partyName: '', place: '', phoneNumber: '', status: 'active', ...initial });
+	let submitted = $state(false);
+	let busy = $state(false);
+
+	const result = $derived(validateParty(values));
+	const errors = $derived<FieldErrors<PartyField>>(submitted && !result.ok ? result.errors : {});
+
+	async function submit(e: SubmitEvent) {
+		e.preventDefault();
+		submitted = true;
+		if (!result.ok) return;
+		busy = true;
+		try {
+			await onsubmit(result.data);
+		} catch (err) {
+			toast.error(friendlyError(err, 'Could not save the party. Please try again.'));
+		} finally {
+			busy = false;
+		}
+	}
+</script>
+
+<form class="card max-w-2xl" onsubmit={submit} novalidate>
+	<div class="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
+		<div class="sm:col-span-2">
+			<label class="label" for="partyName">Party Name <span class="text-red-600">*</span></label>
+			<input id="partyName" class="input {errors.partyName ? 'input-error' : ''}" bind:value={values.partyName} maxlength="120" autocomplete="off" aria-invalid={!!errors.partyName} />
+			{#if errors.partyName}<p class="field-error">{errors.partyName}</p>{/if}
+		</div>
+		<div>
+			<label class="label" for="place">Place</label>
+			<input id="place" class="input {errors.place ? 'input-error' : ''}" bind:value={values.place} maxlength="120" />
+			{#if errors.place}<p class="field-error">{errors.place}</p>{/if}
+		</div>
+		<div>
+			<label class="label" for="phoneNumber">Phone Number</label>
+			<input id="phoneNumber" type="tel" inputmode="tel" class="input {errors.phoneNumber ? 'input-error' : ''}" bind:value={values.phoneNumber} maxlength="20" placeholder="e.g. 9626540553" aria-invalid={!!errors.phoneNumber} />
+			{#if errors.phoneNumber}<p class="field-error">{errors.phoneNumber}</p>{/if}
+		</div>
+		<div>
+			<label class="label" for="status">Status <span class="text-red-600">*</span></label>
+			<select id="status" class="input" bind:value={values.status}>
+				{#each STATUS_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+			</select>
+			{#if errors.status}<p class="field-error">{errors.status}</p>{/if}
+		</div>
+	</div>
+	<div class="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3">
+		<a href={cancelHref} class="btn-secondary">Cancel</a>
+		<button type="submit" class="btn-primary" disabled={busy}>{busy ? 'Saving…' : submitLabel}</button>
+	</div>
+</form>

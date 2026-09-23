@@ -1,0 +1,30 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "transactionDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "partyId", "order": "ASCENDING" },
+        { "fieldPath": "transactionDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "partyId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "transactionDate", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

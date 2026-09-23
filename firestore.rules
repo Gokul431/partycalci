@@ -1,0 +1,102 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- Access
+    // v1: any signed-in user can read and write. To add roles later, e.g. store
+    // users/{uid}.role and check it here:
+    //   function role() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role; }
+    //   function canWrite() { return isSignedIn() && role() in ['admin', 'operator']; }
+    function isSignedIn() { return request.auth != null; }
+    function canRead()    { return isSignedIn(); }
+    function canWrite()   { return isSignedIn(); }
+
+    // ----------------------------------------------------------- Validators
+    function validStatus(s) { return s in ['active', 'inactive']; }
+    function validText(s, max) { return s is string && s.size() <= max; }
+    function requiredText(s, max) { return validText(s, max) && s.trim().size() > 0; }
+    function nonNegative(n) { return n is number && n >= 0; }
+
+    // ------------------------------------------------------------- Parties
+    function validParty(d) {
+      let keys = ['partyName', 'place', 'phoneNumber', 'status', 'createdAt', 'updatedAt'];
+      return d.keys().hasAll(keys) && d.keys().hasOnly(keys)
+        && requiredText(d.partyName, 120)
+        && validText(d.place, 120)
+        && validText(d.phoneNumber, 20)
+        && (d.phoneNumber == '' || d.phoneNumber.matches('^[0-9+\\- ]{7,20}$'))
+        && validStatus(d.status)
+        && d.updatedAt == request.time;
+    }
+
+    match /parties/{partyId} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && validParty(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if canWrite()
+        && validParty(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      // Parties are never deleted — use status 'inactive'.
+      allow delete: if false;
+    }
+
+    // --------------------------------------------------- Received From Party
+    // Server-side re-check of the business rules (keep in sync with
+    // src/lib/utils/calculations.ts):
+    //   total = load - empty
+    //   kg    = (bagCount × 62) - total        (KG_PER_BAG = 62)
+    //   kg >= 0                                (ALLOW_NEGATIVE_KG = false)
+    function partyDoc(id) { return /databases/$(database)/documents/parties/$(id); }
+
+    function validTransaction(d) {
+      let keys = ['transactionDate', 'purchaseType', 'wayNumber', 'partyId', 'itemName',
+                  'load', 'empty', 'total', 'bagCount', 'kg', 'freightCharge', 'narration',
+                  'price', 'amount', 'status', 'createdAt', 'updatedAt'];
+      return d.keys().hasAll(keys) && d.keys().hasOnly(keys)
+        && d.transactionDate is timestamp
+        && d.purchaseType in ['purchase', 'return']
+        && requiredText(d.wayNumber, 50)
+        && d.partyId is string && exists(partyDoc(d.partyId))
+        && requiredText(d.itemName, 120)
+        && nonNegative(d.load)
+        && nonNegative(d.empty)
+        && d.empty <= d.load
+        && d.total == d.load - d.empty
+        && d.bagCount is int && d.bagCount >= 0
+        && d.kg == d.bagCount * 62 - d.total
+        && d.kg >= 0
+        && nonNegative(d.freightCharge)
+        && nonNegative(d.price)
+        && nonNegative(d.amount)
+        && validText(d.narration, 1000)
+        && validStatus(d.status)
+        && d.updatedAt == request.time;
+    }
+
+    function partyIsActive(id) { return get(partyDoc(id)).data.status == 'active'; }
+
+    match /received_from_party/{txId} {
+      allow read: if canRead();
+      // New entries must reference an Active party.
+      allow create: if canWrite()
+        && validTransaction(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && partyIsActive(request.resource.data.partyId);
+      // Edits may keep the existing (possibly now inactive) party, or switch to an active one.
+      allow update: if canWrite()
+        && validTransaction(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (request.resource.data.partyId == resource.data.partyId
+            || partyIsActive(request.resource.data.partyId));
+      // Entries are cancelled via status 'inactive', never deleted.
+      allow delete: if false;
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
