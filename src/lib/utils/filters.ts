@@ -33,3 +33,11 @@ export function filtersToSearch(f: TransactionFilters, pageSize?: number): strin
 export function hasActiveFilters(f: TransactionFilters): boolean {
 	return !!(f.dateFrom || f.dateTo || f.search.trim() || f.status);
 }
+
+/** Identity of a filter set, so an edited draft can be compared with what is already applied. */
+export function filtersKey(f: TransactionFilters): string {
+	return `${f.dateFrom}|${f.dateTo}|${f.search.trim()}|${f.status}`;
+}
+
+/** Typing pause before a draft is applied, long enough to not query on every keystroke. */
+export const FILTER_DEBOUNCE_MS = 300;

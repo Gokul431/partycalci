@@ -13,5 +13,5 @@
 	}
 </script>
 
-<PageHeader title="Add Party" backHref="/parties" backLabel="Parties" />
+<PageHeader title="Add Party" subtitle="Add a new party to the master list" backHref="/parties" backLabel="Parties" />
 <PartyForm cancelHref="/parties" onsubmit={save} />

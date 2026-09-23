@@ -45,7 +45,7 @@
 		</div>
 		<div>
 			<label class="label" for="f-status">Status</label>
-			<select id="f-status" class="input" bind:value={filters.status}>
+			<select id="f-status" class="select" bind:value={filters.status}>
 				<option value="">All</option>
 				<option value="active">Active</option>
 				<option value="inactive">Inactive</option>

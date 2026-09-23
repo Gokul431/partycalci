@@ -37,7 +37,7 @@ import type {
 	TransactionFormValues
 } from '$lib/types';
 import { validateParty, validateTransaction } from '$lib/utils/validation';
-import { addDays, parseISODate } from '$lib/utils/dates';
+import { addDays, parseISODate, toISODate } from '$lib/utils/dates';
 import { AppError } from '$lib/utils/errors';
 
 export const db = getFirestore(app);
@@ -225,10 +225,13 @@ function filterConstraints(f: ResolvedFilters, partyIds: string[] | null): Query
 	return c;
 }
 
-function buildQuery(f: ResolvedFilters, partyIds: string[] | null, extra: QueryConstraint[] = []): Query {
+function buildFilteredQuery(f: ResolvedFilters, partyIds: string[] | null): Query {
 	const filters = filterConstraints(f, partyIds);
-	const base = filters.length ? query(txCol, and(...filters)) : query(txCol);
-	return query(base, orderBy('transactionDate', 'desc'), ...extra);
+	return filters.length ? query(txCol, and(...filters)) : query(txCol);
+}
+
+function buildQuery(f: ResolvedFilters, partyIds: string[] | null, extra: QueryConstraint[] = []): Query {
+	return query(buildFilteredQuery(f, partyIds), orderBy('transactionDate', 'desc'), ...extra);
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -265,6 +268,30 @@ export async function listTransactions(
 	};
 }
 
+/** Rows read per request when exporting; well under Firestore's per-query limits. */
+const EXPORT_PAGE_SIZE = 500;
+
+/** Every row matching the filters, newest first, for export. Capped so a broad filter cannot run away. */
+export async function fetchAllTransactions(f: ResolvedFilters, cap = 5000): Promise<Transaction[]> {
+	if (f.partyIds && f.partyIds.length === 0) return [];
+	if (f.partyIds && f.partyIds.length > MAX_PARTY_MATCHES) {
+		throw new AppError(
+			`Your party search matches more than ${MAX_PARTY_MATCHES} parties. Please type more of the name or phone number.`
+		);
+	}
+	const rows: Transaction[] = [];
+	let after: QueryDocumentSnapshot<DocumentData> | null = null;
+	while (rows.length < cap) {
+		const extra: QueryConstraint[] = [limit(EXPORT_PAGE_SIZE)];
+		if (after) extra.unshift(startAfter(after));
+		const snap = await getDocs(buildQuery(f, f.partyIds, extra));
+		rows.push(...snap.docs.map(toTransaction));
+		if (snap.docs.length < EXPORT_PAGE_SIZE) break;
+		after = snap.docs[snap.docs.length - 1];
+	}
+	return rows.slice(0, cap);
+}
+
 /** Party-id chunks for aggregation; [null] means "no party filter". */
 function partyChunks(f: ResolvedFilters): (string[] | null)[] {
 	if (!f.partyIds) return [null];
@@ -273,7 +300,9 @@ function partyChunks(f: ResolvedFilters): (string[] | null)[] {
 
 export async function countTransactions(f: ResolvedFilters): Promise<number> {
 	const counts = await Promise.all(
-		partyChunks(f).map((ids) => getCountFromServer(buildQuery(f, ids)).then((s) => s.data().count))
+		partyChunks(f).map((ids) =>
+			getCountFromServer(buildFilteredQuery(f, ids)).then((s) => s.data().count)
+		)
 	);
 	return counts.reduce((a, b) => a + b, 0);
 }
@@ -298,7 +327,8 @@ export async function getReportTotals(f: ResolvedFilters): Promise<ReportTotals>
 	const results = await Promise.all(
 		partyChunks(f).map(async (ids) => {
 			if (ids && ids.length === 0) return EMPTY_TOTALS;
-			const q = buildQuery(f, ids);
+			// Unordered: sum() would otherwise need an index spanning the sort field and every summed field.
+			const q = buildFilteredQuery(f, ids);
 			const [a, b] = await Promise.all([
 				getAggregateFromServer(q, {
 					entries: count(),
@@ -348,6 +378,76 @@ export async function getDashboardStats() {
 		totalEntries: totalEntries.data().count,
 		todayEntries: todayEntries.data().count
 	};
+}
+
+export interface DayActivity {
+	date: Date;
+	entries: number;
+	total: number;
+	amount: number;
+}
+
+export interface PartyActivity {
+	partyId: string;
+	entries: number;
+	total: number;
+}
+
+export interface WeeklyActivity {
+	days: DayActivity[];
+	topParties: PartyActivity[];
+	entries: number;
+	total: number;
+	amount: number;
+}
+
+/** A week busier than this loses its oldest days from the charts, rather than reading unbounded. */
+const WEEK_SCAN_LIMIT = 1000;
+
+/** One windowed read, grouped in memory — cheaper than a sum() aggregation per day. */
+export async function getWeeklyActivity(dayCount = 7): Promise<WeeklyActivity> {
+	const today = new Date();
+	today.setHours(0, 0, 0, 0);
+	const start = addDays(today, -(dayCount - 1));
+	const snap = await getDocs(
+		query(
+			txCol,
+			where('transactionDate', '>=', Timestamp.fromDate(start)),
+			orderBy('transactionDate', 'desc'),
+			limit(WEEK_SCAN_LIMIT)
+		)
+	);
+
+	const days: DayActivity[] = Array.from({ length: dayCount }, (_, i) => ({
+		date: addDays(start, i),
+		entries: 0,
+		total: 0,
+		amount: 0
+	}));
+	const slotOf = new Map(days.map((d, i) => [toISODate(d.date), i]));
+	const byParty = new Map<string, PartyActivity>();
+	const week = { entries: 0, total: 0, amount: 0 };
+
+	for (const docSnap of snap.docs) {
+		const t = toTransaction(docSnap);
+		const slot = slotOf.get(toISODate(t.transactionDate));
+		if (slot === undefined) continue;
+
+		days[slot].entries += 1;
+		days[slot].total += t.total;
+		days[slot].amount += t.amount;
+		week.entries += 1;
+		week.total += t.total;
+		week.amount += t.amount;
+
+		const party = byParty.get(t.partyId) ?? { partyId: t.partyId, entries: 0, total: 0 };
+		party.entries += 1;
+		party.total += t.total;
+		byParty.set(t.partyId, party);
+	}
+
+	const topParties = [...byParty.values()].sort((a, b) => b.entries - a.entries).slice(0, 5);
+	return { days, topParties, ...week };
 }
 
 export async function getRecentTransactions(max = 10, partyId?: string): Promise<Transaction[]> {

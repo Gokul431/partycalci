@@ -1,4 +1,4 @@
-# Party Calci — Rice Mill Party & Received From Party
+# MillBooks — Rice Mill Party & Received From Party
 
 SvelteKit + TypeScript + Tailwind CSS, with Firebase Authentication and Cloud Firestore
 as the only backend. Deployed as a single-page app on Firebase Hosting.
@@ -39,12 +39,16 @@ npm run deploy         # vite build → firebase deploy (hosting + rules + index
 Defined once in `src/lib/utils/calculations.ts`:
 
 - `Total = Load − Empty`
-- `Kg = (Number of Bags × KG_PER_BAG) − Total`, with `KG_PER_BAG = 62`
-- Negative Kg is rejected (`ALLOW_NEGATIVE_KG = false`).
+- `Bags = floor(Total ÷ KG_PER_BAG)`, with `KG_PER_BAG = 62`
+- `Kg = Total − (Bags × KG_PER_BAG)` — the loose remainder, always under 62
+
+The total weight is expressed as whole bags plus what is left over, so a Total of 95
+reads as "1 bag 33 kg". Bags and Kg are both derived from Load and Empty; neither is
+typed in.
 
 Price, Amount and Freight Charge are manual inputs with no formula.
 
-Total and Kg are read-only in the UI. They are recalculated from the raw inputs just
+Total, Bags and Kg are read-only in the UI. They are recalculated from the raw inputs just
 before every write (`src/lib/firebase/firestore.ts`), and `firestore.rules` checks the
 same formulas on the server, so tampered values are rejected. If a rule changes, update
 both `calculations.ts` and `firestore.rules`.

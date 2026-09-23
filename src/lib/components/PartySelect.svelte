@@ -114,7 +114,7 @@
 			<ul
 				id="{id}-listbox"
 				role="listbox"
-				class="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+				class="absolute z-30 mt-1.5 max-h-72 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-xl ring-1 ring-slate-900/5"
 			>
 				{#each filtered as p, i (p.id)}
 					<!-- Keyboard selection is handled on the combobox input (arrow keys + Enter). -->
@@ -122,16 +122,21 @@
 					<li
 						role="option"
 						aria-selected={p.id === value}
-						class="cursor-pointer px-3 py-2 text-sm {i === highlighted ? 'bg-emerald-50' : ''}"
+						class="flex cursor-pointer items-center gap-2 px-3 py-2.5 text-sm {i === highlighted ? 'bg-emerald-50' : ''}"
 						onmousedown={(e) => e.preventDefault()}
 						onclick={() => choose(p)}
 						onmouseenter={() => (highlighted = i)}
 					>
-						<div class="font-medium text-slate-900">{p.partyName}</div>
-						<div class="text-xs text-slate-500">{[p.place, p.phoneNumber].filter(Boolean).join(' · ') || '—'}</div>
+						<span class="min-w-0 flex-1">
+							<span class="block truncate font-medium text-slate-900">{p.partyName}</span>
+							<span class="block truncate text-xs text-slate-500">
+								{[p.place, p.phoneNumber].filter(Boolean).join(' · ') || '—'}
+							</span>
+						</span>
+						{#if p.id === value}<Icon name="check" class="h-4 w-4 shrink-0 text-emerald-600" />{/if}
 					</li>
 				{:else}
-					<li class="px-3 py-3 text-sm text-slate-500">
+					<li class="px-3 py-4 text-center text-sm text-slate-500">
 						{parties.length ? 'No active party matches your search.' : 'No active parties. Add a party first.'}
 					</li>
 				{/each}
@@ -139,14 +144,15 @@
 		{/if}
 	</div>
 {:else if selected}
-	<div class="flex items-start justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50/50 px-3 py-2">
-		<div class="text-sm">
+	<div class="flex items-start justify-between gap-3 rounded-md border border-slate-300 bg-white px-3 py-2">
+		<div class="min-w-0 text-sm">
 			<div class="flex items-center gap-2">
-				<span class="font-semibold text-slate-900">{selected.partyName}</span>
+				<span class="truncate font-medium text-slate-900">{selected.partyName}</span>
 				{#if selected.status !== 'active'}<StatusBadge status={selected.status} />{/if}
 			</div>
-			<div class="mt-0.5 text-slate-600">{selected.place || '—'}</div>
-			<div class="text-slate-600 tabular-nums">{selected.phoneNumber || '—'}</div>
+			<div class="truncate text-xs text-slate-500">
+				{[selected.place, selected.phoneNumber].filter(Boolean).join(' · ') || '—'}
+			</div>
 		</div>
 		<button type="button" class="btn-link shrink-0" onclick={change}>Change</button>
 	</div>

@@ -58,8 +58,8 @@
 
 {#snippet item(label: string, value: string, strong = false)}
 	<div>
-		<dt class="text-xs text-slate-500">{label}</dt>
-		<dd class="text-sm {strong ? 'font-semibold text-slate-900' : 'text-slate-800'} tabular-nums">{value}</dd>
+		<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">{label}</dt>
+		<dd class="mt-1 text-sm {strong ? 'font-semibold text-slate-900' : 'text-slate-800'} tabular-nums">{value}</dd>
 	</div>
 {/snippet}
 
@@ -74,7 +74,13 @@
 	<PageHeader title="Entry not found" backHref="/received-from-party" backLabel="Received From Party" />
 	<div class="card"><EmptyState title="This entry does not exist." /></div>
 {:else}
-	<PageHeader title="Way No. {tx.wayNumber}" subtitle="Received from party entry" backHref="/received-from-party" backLabel="Back to List">
+	<PageHeader
+		title="Way No. {tx.wayNumber}"
+		subtitle="{purchaseTypeLabel(tx.purchaseType)} · {formatDate(tx.transactionDate)} · {party?.partyName ?? 'Unknown party'}"
+		backHref="/received-from-party"
+		backLabel="Back to List"
+	>
+		{#snippet badge()}<StatusBadge status={tx?.status ?? 'active'} />{/snippet}
 		{#snippet actions()}
 			<button type="button" class="btn-secondary" onclick={() => (confirmOpen = true)}>
 				<Icon name="power" />{tx?.status === 'active' ? 'Cancel Entry' : 'Restore Entry'}
@@ -83,21 +89,30 @@
 		{/snippet}
 	</PageHeader>
 
+	<div class="card mb-4 grid grid-cols-2 divide-slate-200 lg:grid-cols-4 lg:divide-x">
+		{#each [{ label: 'Total Weight', value: formatKg(tx.total) }, { label: 'Kg', value: formatKg(tx.kg) }, { label: 'Number of Bags', value: formatNumber(tx.bagCount) }, { label: 'Amount', value: formatCurrency(tx.amount) }] as s (s.label)}
+			<div class="px-5 py-4">
+				<div class="text-xs font-semibold tracking-wide text-slate-500 uppercase">{s.label}</div>
+				<div class="mt-1 text-xl font-bold text-slate-900">{s.value}</div>
+			</div>
+		{/each}
+	</div>
+
 	<div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
 		<section class="card">
 			<h2 class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">Transaction Details</h2>
-			<dl class="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
+			<dl class="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2">
 				{@render item('Date', formatDate(tx.transactionDate))}
 				{@render item('Purchase Type', purchaseTypeLabel(tx.purchaseType))}
 				{@render item('Way Number', tx.wayNumber, true)}
 				{@render item('Item Name', tx.itemName)}
 				<div class="sm:col-span-2">
-					<dt class="text-xs text-slate-500">Party</dt>
-					<dd class="text-sm">
+					<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Party</dt>
+					<dd class="mt-1 text-sm">
 						{#if party}
-							<a href="/parties/{party.id}" class="font-semibold text-slate-900 hover:underline">{party.partyName}</a>
-							{#if party.status === 'inactive'}<span class="ml-1"><StatusBadge status="inactive" /></span>{/if}
-							<div class="text-slate-600">{party.place || '—'}</div>
+							<a href="/parties/{party.id}" class="font-medium text-emerald-700 hover:underline">{party.partyName}</a>
+							{#if party.status === 'inactive'}<span class="ml-1.5"><StatusBadge status="inactive" /></span>{/if}
+							<div class="mt-0.5 text-slate-600">{party.place || '—'}</div>
 							<div class="text-slate-600 tabular-nums">{party.phoneNumber || '—'}</div>
 						{:else}
 							<span class="text-slate-500">{parties.loading ? 'Loading…' : 'Party not found'}</span>
@@ -109,28 +124,32 @@
 
 		<section class="card">
 			<h2 class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">Weight Details</h2>
-			<dl class="grid grid-cols-2 gap-4 p-5 sm:grid-cols-3">
+			<dl class="grid grid-cols-2 gap-x-6 gap-y-5 p-5 sm:grid-cols-3">
 				{@render item('Load', formatKg(tx.load))}
 				{@render item('Empty', formatKg(tx.empty))}
 				{@render item('Total (Load − Empty)', formatKg(tx.total), true)}
 				{@render item('Number of Bags', formatNumber(tx.bagCount))}
-				{@render item('Kg', formatKg(tx.kg), true)}
+				{@render item('Loose Kg', formatKg(tx.kg), true)}
 			</dl>
 			<p class="border-t border-slate-100 px-5 py-2.5 text-xs text-slate-500 tabular-nums">
-				Kg = ({formatNumber(tx.bagCount)} × {KG_PER_BAG}) − {formatNumber(tx.total)} = {formatNumber(tx.kg)}
+				{formatNumber(tx.total)} kg = {formatNumber(tx.bagCount)} bag{tx.bagCount === 1 ? '' : 's'}
+				× {KG_PER_BAG} + {formatNumber(tx.kg)} kg
 			</p>
 		</section>
 
 		<section class="card xl:col-span-2">
 			<h2 class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">Other Details</h2>
-			<dl class="grid grid-cols-2 gap-4 p-5 md:grid-cols-4">
+			<dl class="grid grid-cols-2 gap-x-6 gap-y-5 p-5 md:grid-cols-4">
 				{@render item('Freight Charge', formatCurrency(tx.freightCharge))}
 				{@render item('Price', formatCurrency(tx.price))}
 				{@render item('Amount', formatCurrency(tx.amount), true)}
-				<div><dt class="text-xs text-slate-500">Status</dt><dd><StatusBadge status={tx.status} /></dd></div>
+				<div>
+					<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Status</dt>
+					<dd class="mt-1"><StatusBadge status={tx.status} /></dd>
+				</div>
 				<div class="col-span-2 md:col-span-4">
-					<dt class="text-xs text-slate-500">Narration</dt>
-					<dd class="text-sm whitespace-pre-wrap text-slate-800">{tx.narration || '—'}</dd>
+					<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Narration</dt>
+					<dd class="mt-1 text-sm whitespace-pre-wrap text-slate-800">{tx.narration || '—'}</dd>
 				</div>
 				{@render item('Created', formatDateTime(tx.createdAt))}
 				{@render item('Last Updated', formatDateTime(tx.updatedAt))}

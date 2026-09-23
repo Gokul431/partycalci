@@ -1,4 +1,4 @@
-import { ALLOW_NEGATIVE_KG, calculateKg, calculateTotal } from './calculations';
+import { calculateBags, calculateKg, calculateTotal } from './calculations';
 import { parseISODate } from './dates';
 import type { PartyInput, TransactionData, TransactionFormValues } from '$lib/types';
 
@@ -44,35 +44,25 @@ export function validateParty(input: PartyInput): Result<PartyInput, PartyField>
 export type TransactionField = keyof TransactionFormValues | 'total' | 'kg';
 
 export const EMPTY_GT_LOAD = 'Empty weight cannot be greater than Load weight.';
-export const NEGATIVE_KG =
-	'Calculated Kg is negative. Check the number of bags and weights — negative Kg cannot be saved.';
 
-/** Validates the weight inputs and returns the calculated Total and Kg when possible. */
-export function computeWeights(v: Pick<TransactionFormValues, 'load' | 'empty' | 'bagCount'>): {
+/** Validates the weight inputs and derives Total, Bags and Kg when possible. */
+export function computeWeights(v: Pick<TransactionFormValues, 'load' | 'empty'>): {
 	total: number | null;
+	bagCount: number | null;
 	kg: number | null;
-	errors: FieldErrors<'load' | 'empty' | 'bagCount' | 'kg'>;
+	errors: FieldErrors<'load' | 'empty'>;
 } {
-	const errors: FieldErrors<'load' | 'empty' | 'bagCount' | 'kg'> = {};
+	const errors: FieldErrors<'load' | 'empty'> = {};
 	if (!isNum(v.load)) errors.load = 'Load is required.';
 	else if (v.load < 0) errors.load = 'Load must be 0 or more.';
 	if (!isNum(v.empty)) errors.empty = 'Empty is required.';
 	else if (v.empty < 0) errors.empty = 'Empty must be 0 or more.';
-	if (!isNum(v.bagCount)) errors.bagCount = 'Number of bags is required.';
-	else if (v.bagCount < 0) errors.bagCount = 'Number of bags must be 0 or more.';
-	else if (!Number.isInteger(v.bagCount)) errors.bagCount = 'Number of bags must be a whole number.';
 
-	let total: number | null = null;
-	let kg: number | null = null;
-	if (isNum(v.load) && isNum(v.empty)) {
-		if (v.empty > v.load) errors.empty = EMPTY_GT_LOAD;
-		total = calculateTotal(v.load, v.empty);
-		if (isNum(v.bagCount)) {
-			kg = calculateKg(v.bagCount, total);
-			if (kg < 0 && !ALLOW_NEGATIVE_KG) errors.kg = NEGATIVE_KG;
-		}
-	}
-	return { total, kg, errors };
+	if (!isNum(v.load) || !isNum(v.empty)) return { total: null, bagCount: null, kg: null, errors };
+
+	if (v.empty > v.load) errors.empty = EMPTY_GT_LOAD;
+	const total = calculateTotal(v.load, v.empty);
+	return { total, bagCount: calculateBags(total), kg: calculateKg(total), errors };
 }
 
 function optionalAmount(
@@ -122,7 +112,7 @@ export function validateTransaction(v: TransactionFormValues): Result<Transactio
 	if (narration.length > 1000) errors.narration = 'Narration is too long (max 1000).';
 	if (!isStatus(v.status)) errors.status = 'Status is required.';
 
-	if (Object.keys(errors).length || !date || w.total == null || w.kg == null) {
+	if (Object.keys(errors).length || !date || w.total == null || w.bagCount == null || w.kg == null) {
 		return { ok: false, errors };
 	}
 
@@ -137,7 +127,7 @@ export function validateTransaction(v: TransactionFormValues): Result<Transactio
 			load: v.load as number,
 			empty: v.empty as number,
 			total: w.total,
-			bagCount: v.bagCount as number,
+			bagCount: w.bagCount,
 			kg: w.kg,
 			freightCharge,
 			narration,

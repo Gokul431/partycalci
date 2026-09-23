@@ -45,9 +45,9 @@ service cloud.firestore {
     // --------------------------------------------------- Received From Party
     // Server-side re-check of the business rules (keep in sync with
     // src/lib/utils/calculations.ts):
-    //   total = load - empty
-    //   kg    = (bagCount × 62) - total        (KG_PER_BAG = 62)
-    //   kg >= 0                                (ALLOW_NEGATIVE_KG = false)
+    //   total    = load - empty
+    //   bagCount = floor(total / 62)           (KG_PER_BAG = 62)
+    //   kg       = total - (bagCount × 62)     the loose remainder
     function partyDoc(id) { return /databases/$(database)/documents/parties/$(id); }
 
     function validTransaction(d) {
@@ -65,8 +65,8 @@ service cloud.firestore {
         && d.empty <= d.load
         && d.total == d.load - d.empty
         && d.bagCount is int && d.bagCount >= 0
-        && d.kg == d.bagCount * 62 - d.total
-        && d.kg >= 0
+        && d.bagCount == math.floor(d.total / 62)
+        && d.kg == d.total - d.bagCount * 62
         && nonNegative(d.freightCharge)
         && nonNegative(d.price)
         && nonNegative(d.amount)

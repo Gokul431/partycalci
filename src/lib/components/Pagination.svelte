@@ -34,7 +34,7 @@
 		<label for="page-size" class="text-slate-500">Rows per page</label>
 		<select
 			id="page-size"
-			class="rounded-md border border-slate-300 bg-white py-1 pr-7 pl-2 text-sm"
+			class="select w-auto py-1"
 			value={pageSize}
 			{disabled}
 			onchange={(e) => onpagesize(Number(e.currentTarget.value))}

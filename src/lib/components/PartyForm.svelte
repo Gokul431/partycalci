@@ -40,16 +40,21 @@
 	}
 </script>
 
-<form class="card max-w-2xl" onsubmit={submit} novalidate>
-	<div class="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-		<div class="sm:col-span-2">
+<form class="card" onsubmit={submit} novalidate>
+	<header class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3">
+		<h2 class="text-sm font-semibold text-slate-800">Party Information</h2>
+		<p class="text-xs text-slate-500"><span class="text-red-600">*</span> Required fields</p>
+	</header>
+
+	<div class="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
+		<div>
 			<label class="label" for="partyName">Party Name <span class="text-red-600">*</span></label>
 			<input id="partyName" class="input {errors.partyName ? 'input-error' : ''}" bind:value={values.partyName} maxlength="120" autocomplete="off" aria-invalid={!!errors.partyName} />
 			{#if errors.partyName}<p class="field-error">{errors.partyName}</p>{/if}
 		</div>
 		<div>
 			<label class="label" for="place">Place</label>
-			<input id="place" class="input {errors.place ? 'input-error' : ''}" bind:value={values.place} maxlength="120" />
+			<input id="place" class="input {errors.place ? 'input-error' : ''}" bind:value={values.place} maxlength="120" placeholder="Village or town" />
 			{#if errors.place}<p class="field-error">{errors.place}</p>{/if}
 		</div>
 		<div>
@@ -59,12 +64,14 @@
 		</div>
 		<div>
 			<label class="label" for="status">Status <span class="text-red-600">*</span></label>
-			<select id="status" class="input" bind:value={values.status}>
+			<select id="status" class="select" bind:value={values.status}>
 				{#each STATUS_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 			</select>
 			{#if errors.status}<p class="field-error">{errors.status}</p>{/if}
+			<p class="mt-1 text-xs text-slate-500">Only active parties can be chosen for new entries.</p>
 		</div>
 	</div>
+
 	<div class="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3">
 		<a href={cancelHref} class="btn-secondary">Cancel</a>
 		<button type="submit" class="btn-primary" disabled={busy}>{busy ? 'Saving…' : submitLabel}</button>

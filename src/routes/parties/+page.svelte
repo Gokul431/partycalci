@@ -93,7 +93,7 @@
 	</div>
 	<div class="sm:w-44">
 		<label class="label" for="party-status">Status</label>
-		<select id="party-status" class="input" bind:value={status}>
+		<select id="party-status" class="select" bind:value={status}>
 			<option value="">All</option>
 			<option value="active">Active</option>
 			<option value="inactive">Inactive</option>
@@ -111,17 +111,28 @@
 	{/snippet}
 	{#snippet body()}
 		{#each rows as p (p.id)}
+			{@const deactivating = p.status === 'active'}
 			<tr class="hover:bg-slate-50">
-				<td class="td font-medium text-slate-900"><a href="/parties/{p.id}" class="hover:underline">{p.partyName}</a></td>
+				<td class="td"><a href="/parties/{p.id}" class="font-medium text-emerald-700 hover:underline">{p.partyName}</a></td>
 				<td class="td">{p.place || '—'}</td>
 				<td class="td tabular-nums">{p.phoneNumber || '—'}</td>
 				<td class="td"><StatusBadge status={p.status} /></td>
 				<td class="td">
-					<div class="flex justify-end gap-3">
-						<a href="/parties/{p.id}" class="btn-link inline-flex items-center gap-1"><Icon name="eye" class="h-3.5 w-3.5" />View</a>
-						<a href="/parties/{p.id}/edit" class="btn-link inline-flex items-center gap-1"><Icon name="edit" class="h-3.5 w-3.5" />Edit</a>
-						<button type="button" class="inline-flex items-center gap-1 text-sm font-medium {p.status === 'active' ? 'text-red-600 hover:text-red-800' : 'text-emerald-700 hover:text-emerald-900'}" onclick={() => askToggle(p)}>
-							<Icon name="power" class="h-3.5 w-3.5" />{p.status === 'active' ? 'Deactivate' : 'Activate'}
+					<div class="flex items-center justify-end gap-1">
+						<a href="/parties/{p.id}" class="icon-action" title="View" aria-label="View {p.partyName}">
+							<Icon name="eye" class="h-4 w-4" />
+						</a>
+						<a href="/parties/{p.id}/edit" class="icon-action" title="Edit" aria-label="Edit {p.partyName}">
+							<Icon name="edit" class="h-4 w-4" />
+						</a>
+							<button
+								type="button"
+								class="icon-action {deactivating ? 'hover:bg-red-50 hover:text-red-600' : 'hover:bg-emerald-50 hover:text-emerald-700'}"
+								title={deactivating ? 'Deactivate' : 'Activate'}
+								aria-label="{deactivating ? 'Deactivate' : 'Activate'} {p.partyName}"
+								onclick={() => askToggle(p)}
+							>
+							<Icon name="power" class="h-4 w-4" />
 						</button>
 					</div>
 				</td>

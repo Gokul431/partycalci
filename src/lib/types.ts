@@ -61,7 +61,6 @@ export interface TransactionFormValues {
 	itemName: string;
 	load: number | null;
 	empty: number | null;
-	bagCount: number | null;
 	freightCharge: number | null;
 	narration: string;
 	price: number | null;

@@ -40,7 +40,6 @@
 			itemName: '',
 			load: null,
 			empty: null,
-			bagCount: null,
 			freightCharge: null,
 			narration: '',
 			price: null,
@@ -59,7 +58,6 @@
 		// Before first submit, surface only the weight-rule errors as the user types.
 		const live: FieldErrors<TransactionField> = {};
 		if (v.load != null && v.empty != null && weights.errors.empty) live.empty = weights.errors.empty;
-		if (weights.errors.kg) live.kg = weights.errors.kg;
 		return live;
 	});
 
@@ -89,8 +87,11 @@
 
 <form class="space-y-4" onsubmit={submit} novalidate>
 	<section class="card">
-		<h2 class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">Basic Details</h2>
-		<div class="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+		<header class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3">
+			<h2 class="text-sm font-semibold text-slate-800">Basic Details</h2>
+			<p class="text-xs text-slate-500">{@render req()} Required fields</p>
+		</header>
+		<div class="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
 			<div>
 				<label class="label" for="transactionDate">Date {@render req()}</label>
 				<input id="transactionDate" type="date" class="input {errors.transactionDate ? 'input-error' : ''}" bind:value={v.transactionDate} />
@@ -98,7 +99,7 @@
 			</div>
 			<div>
 				<label class="label" for="purchaseType">Type of Purchase {@render req()}</label>
-				<select id="purchaseType" class="input {errors.purchaseType ? 'input-error' : ''}" bind:value={v.purchaseType}>
+				<select id="purchaseType" class="select {errors.purchaseType ? 'input-error' : ''}" bind:value={v.purchaseType}>
 					{#each PURCHASE_TYPE_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 				</select>
 				{@render err('purchaseType')}
@@ -108,12 +109,12 @@
 				<input id="wayNumber" class="input {errors.wayNumber ? 'input-error' : ''}" bind:value={v.wayNumber} placeholder="e.g. 37473-R" maxlength="50" autocomplete="off" />
 				{@render err('wayNumber')}
 			</div>
-			<div>
+			<div class="sm:col-span-2 lg:col-span-1">
 				<label class="label" for="party">Party Name {@render req()}</label>
 				<PartySelect id="party" bind:value={v.partyId} {parties} loading={partiesLoading} error={errors.partyId} />
 				{@render err('partyId')}
 			</div>
-			<div class="md:col-span-2">
+			<div class="sm:col-span-2">
 				<label class="label" for="itemName">Item Name {@render req()}</label>
 				<input id="itemName" class="input {errors.itemName ? 'input-error' : ''}" bind:value={v.itemName} maxlength="120" placeholder="e.g. Paddy" />
 				{@render err('itemName')}
@@ -123,7 +124,7 @@
 
 	<section class="card">
 		<h2 class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">Weight Details</h2>
-		<div class="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+		<div class="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-4">
 			<div>
 				<label class="label" for="load">Load (kg) {@render req()}</label>
 				<input id="load" type="number" inputmode="decimal" min="0" step="any" class="input {errors.load ? 'input-error' : ''}" bind:value={v.load} placeholder="e.g. 7500" />
@@ -139,40 +140,40 @@
 				<input id="total" class="input-readonly" readonly tabindex="-1" value={weights.total == null ? '' : formatNumber(weights.total)} placeholder="Auto calculated" />
 			</div>
 			<div>
-				<label class="label" for="bagCount">Number of Bags {@render req()}</label>
-				<input id="bagCount" type="number" inputmode="numeric" min="0" step="1" class="input {errors.bagCount ? 'input-error' : ''}" bind:value={v.bagCount} placeholder="e.g. 100" />
-				{@render err('bagCount')}
+				<label class="label" for="bagCount">Number of Bags <span class="font-normal text-slate-400">— Total ÷ {KG_PER_BAG}</span></label>
+				<input id="bagCount" class="input-readonly" readonly tabindex="-1" value={weights.bagCount == null ? '' : formatNumber(weights.bagCount)} placeholder="Auto calculated" />
 			</div>
 		</div>
 
-		<div class="mx-5 mb-5 rounded-md border px-4 py-3 {errors.kg ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'}" aria-live="polite">
-			<div class="grid grid-cols-3 gap-3 text-center">
-				<div>
-					<div class="text-xs text-slate-500">Total Weight</div>
-					<div class="font-semibold tabular-nums">{formatKg(weights.total)}</div>
+		<div class="mx-5 mb-5 overflow-hidden rounded-lg border border-slate-200" aria-live="polite">
+			<div class="grid grid-cols-3 divide-x divide-slate-200 bg-slate-50">
+				<div class="px-4 py-3">
+					<div class="text-xs font-semibold tracking-wide text-slate-500 uppercase">Total Weight</div>
+					<div class="mt-0.5 text-lg font-bold text-slate-900">{formatKg(weights.total)}</div>
 				</div>
-				<div>
-					<div class="text-xs text-slate-500">Bags</div>
-					<div class="font-semibold tabular-nums">{formatNumber(v.bagCount)}</div>
+				<div class="px-4 py-3">
+					<div class="text-xs font-semibold tracking-wide text-slate-500 uppercase">Bags</div>
+					<div class="mt-0.5 text-lg font-bold text-slate-900">{formatNumber(weights.bagCount)}</div>
 				</div>
-				<div>
-					<div class="text-xs text-slate-500">Calculated Kg</div>
-					<div class="font-semibold tabular-nums {errors.kg ? 'text-red-700' : 'text-emerald-800'}">{formatKg(weights.kg)}</div>
+				<div class="px-4 py-3">
+					<div class="text-xs font-semibold tracking-wide text-slate-500 uppercase">Loose Kg</div>
+					<div class="mt-0.5 text-lg font-bold text-emerald-700">{formatKg(weights.kg)}</div>
 				</div>
 			</div>
-			<p class="mt-2 text-center text-xs text-slate-500 tabular-nums">
-				Kg = (Bags × {KG_PER_BAG}) − Total
-				{#if weights.kg != null}
-					= ({formatNumber(v.bagCount)} × {KG_PER_BAG}) − {formatNumber(weights.total)} = {formatNumber(weights.kg)}
+			<p class="border-t border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-500 tabular-nums">
+				{#if weights.total != null}
+					{formatNumber(weights.total)} kg = {formatNumber(weights.bagCount)} bag{weights.bagCount === 1 ? '' : 's'}
+					× {KG_PER_BAG} + {formatNumber(weights.kg)} kg
+				{:else}
+					Total ÷ {KG_PER_BAG} gives the bags; the remainder is the loose Kg.
 				{/if}
 			</p>
-			{#if errors.kg}<p class="mt-1 text-center text-xs font-medium text-red-700">{errors.kg}</p>{/if}
 		</div>
 	</section>
 
 	<section class="card">
 		<h2 class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">Other Details</h2>
-		<div class="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+		<div class="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-4">
 			<div>
 				<label class="label" for="freightCharge">Freight Charge (₹)</label>
 				<input id="freightCharge" type="number" inputmode="decimal" min="0" step="0.01" class="input {errors.freightCharge ? 'input-error' : ''}" bind:value={v.freightCharge} placeholder="0.00" />
@@ -190,20 +191,20 @@
 			</div>
 			<div>
 				<label class="label" for="status">Status {@render req()}</label>
-				<select id="status" class="input" bind:value={v.status}>
+				<select id="status" class="select" bind:value={v.status}>
 					{#each STATUS_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 				</select>
 				{@render err('status')}
 			</div>
-			<div class="md:col-span-2">
+			<div class="sm:col-span-2 lg:col-span-4">
 				<label class="label" for="narration">Narration</label>
-				<textarea id="narration" rows="3" class="input {errors.narration ? 'input-error' : ''}" bind:value={v.narration} maxlength="1000"></textarea>
+				<textarea id="narration" rows="3" class="input {errors.narration ? 'input-error' : ''}" bind:value={v.narration} maxlength="1000" placeholder="Optional notes about this entry"></textarea>
 				{@render err('narration')}
 			</div>
 		</div>
 	</section>
 
-	<div class="flex justify-end gap-2">
+	<div class="sticky bottom-0 -mx-4 flex justify-end gap-2 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:-mx-8 lg:px-8">
 		<a href={cancelHref} class="btn-secondary">Cancel</a>
 		<button type="submit" class="btn-primary" disabled={busy}>{busy ? 'Saving…' : submitLabel}</button>
 	</div>

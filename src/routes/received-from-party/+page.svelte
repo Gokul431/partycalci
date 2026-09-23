@@ -11,28 +11,58 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import ReportDialog from '$lib/components/ReportDialog.svelte';
 	import {
 		countTransactions,
+		fetchAllTransactions,
 		listTransactions,
 		resolveFilters,
 		setTransactionStatus
 	} from '$lib/firebase/firestore';
+	import { downloadVoucherListing } from '$lib/utils/pdf';
+	import type { DateRange } from '$lib/utils/ranges';
 	import { parties } from '$lib/stores/parties.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { friendlyError } from '$lib/utils/errors';
 	import { formatDate } from '$lib/utils/dates';
 	import { formatCurrency, formatNumber, purchaseTypeLabel } from '$lib/utils/format';
-	import { filtersFromUrl, filtersToSearch, hasActiveFilters, pageSizeFromUrl } from '$lib/utils/filters';
+	import {
+		FILTER_DEBOUNCE_MS,
+		filtersFromUrl,
+		filtersKey,
+		filtersToSearch,
+		hasActiveFilters,
+		pageSizeFromUrl
+	} from '$lib/utils/filters';
 	import { EMPTY_FILTERS, type Transaction, type TransactionFilters } from '$lib/types';
 
 	const filters = $derived(filtersFromUrl(page.url));
 	const pageSize = $derived(pageSizeFromUrl(page.url));
 	const filtered = $derived(hasActiveFilters(filters));
 
-	// Editable copy of the filters; applied to the URL on Search.
+	// Editable copy of the filters, applied to the URL as the user types.
 	let draft = $state<TransactionFilters>({ ...EMPTY_FILTERS });
+	// The URL state the draft already agrees with. Our own navigation echoes back through
+	// `filters`, and without this the echo would overwrite characters typed since.
+	let synced = '';
+
+	// Follow the URL only when it moved somewhere we did not put it (first load, back/forward).
 	$effect(() => {
+		const key = filtersKey(filters);
+		if (key === synced) return;
+		synced = key;
 		draft = { ...filters };
+	});
+
+	// Live search: apply the draft once typing pauses.
+	$effect(() => {
+		const key = filtersKey(draft);
+		if (key === synced) return;
+		const timer = setTimeout(() => {
+			synced = key;
+			applyFilters(draft);
+		}, FILTER_DEBOUNCE_MS);
+		return () => clearTimeout(timer);
 	});
 
 	let rows = $state<Transaction[]>([]);
@@ -90,7 +120,43 @@
 	});
 
 	function applyFilters(f: TransactionFilters, size = pageSize) {
-		goto(`/received-from-party${filtersToSearch(f, size)}`, { keepFocus: true, noScroll: true });
+		// replaceState so live typing does not fill the back button with every keystroke.
+		goto(`/received-from-party${filtersToSearch(f, size)}`, {
+			keepFocus: true,
+			noScroll: true,
+			replaceState: true
+		});
+	}
+
+	// PDF export — the dialog picks the dates; the list's other filters carry over.
+	let pdfOpen = $state(false);
+	let pdfBusy = $state(false);
+
+	const pdfNote = $derived(
+		[
+			filters.search.trim() ? `party matching "${filters.search.trim()}"` : '',
+			filters.status ? `status ${filters.status}` : ''
+		]
+			.filter(Boolean)
+			.join(' and ')
+	);
+
+	async function downloadPdf(range: DateRange) {
+		pdfBusy = true;
+		try {
+			const forPdf = { ...filters, dateFrom: range.from, dateTo: range.to };
+			const rows = await fetchAllTransactions(resolveFilters(forPdf, parties.list));
+			if (rows.length === 0) {
+				toast.error('No entries match this period, so there is nothing to print.');
+				return;
+			}
+			await downloadVoucherListing(rows, parties.byId, forPdf);
+			pdfOpen = false;
+		} catch (e) {
+			toast.error(friendlyError(e, 'Could not build the PDF.'));
+		} finally {
+			pdfBusy = false;
+		}
 	}
 
 	// Cancel / restore (soft status change, never a hard delete)
@@ -118,9 +184,20 @@
 
 <PageHeader title="Received From Party" subtitle="Material received from parties">
 	{#snippet actions()}
+		<button type="button" class="btn-secondary" onclick={() => (pdfOpen = true)}>
+			<Icon name="download" />Download PDF
+		</button>
 		<a href="/received-from-party/new" class="btn-primary"><Icon name="plus" />New Entry</a>
 	{/snippet}
 </PageHeader>
+
+<ReportDialog
+	bind:open={pdfOpen}
+	initial={{ from: filters.dateFrom, to: filters.dateTo }}
+	appliedFilters={pdfNote}
+	busy={pdfBusy}
+	ondownload={downloadPdf}
+/>
 
 <FilterBar
 	bind:filters={draft}
@@ -142,10 +219,13 @@
 	{#snippet body()}
 		{#each rows as t (t.id)}
 			{@const party = parties.byId.get(t.partyId)}
+			{@const cancelling = t.status === 'active'}
 			<tr class="group hover:bg-slate-50 {t.status === 'inactive' ? 'text-slate-400' : ''}">
-				<td class="td">{formatDate(t.transactionDate)}</td>
+				<td class="td">
+					<a class="font-medium text-emerald-700 hover:underline" href="/received-from-party/{t.id}">{formatDate(t.transactionDate)}</a>
+				</td>
 				<td class="td">{purchaseTypeLabel(t.purchaseType)}</td>
-				<td class="td font-medium"><a class="hover:underline" href="/received-from-party/{t.id}">{t.wayNumber}</a></td>
+				<td class="td"><a class="font-medium text-slate-900 hover:underline" href="/received-from-party/{t.id}">{t.wayNumber}</a></td>
 				<td class="td">
 					<div class="font-medium text-slate-900">{party?.partyName ?? 'Unknown party'}</div>
 					{#if party?.phoneNumber}<div class="text-xs text-slate-500 tabular-nums">{party.phoneNumber}</div>{/if}
@@ -162,17 +242,25 @@
 				<td class="td num">{formatCurrency(t.amount)}</td>
 				<td class="td"><StatusBadge status={t.status} /></td>
 				<td class="td sticky right-0 bg-white group-hover:bg-slate-50">
-					<div class="flex justify-end gap-3">
-						<a href="/received-from-party/{t.id}" class="btn-link" title="View">View</a>
-						<a href="/received-from-party/{t.id}/edit" class="btn-link" title="Edit">Edit</a>
-						<button
-							type="button"
-							class="text-sm font-medium {t.status === 'active' ? 'text-red-600 hover:text-red-800' : 'text-emerald-700 hover:text-emerald-900'}"
-							onclick={() => {
-								target = t;
-								confirmOpen = true;
-							}}>{t.status === 'active' ? 'Cancel' : 'Restore'}</button
-						>
+					<div class="flex items-center justify-end gap-1">
+						<a href="/received-from-party/{t.id}" class="icon-action" title="View" aria-label="View entry {t.wayNumber}">
+							<Icon name="eye" class="h-4 w-4" />
+						</a>
+						<a href="/received-from-party/{t.id}/edit" class="icon-action" title="Edit" aria-label="Edit entry {t.wayNumber}">
+							<Icon name="edit" class="h-4 w-4" />
+						</a>
+							<button
+								type="button"
+								class="icon-action {cancelling ? 'hover:bg-red-50 hover:text-red-600' : 'hover:bg-emerald-50 hover:text-emerald-700'}"
+								title={cancelling ? 'Cancel' : 'Restore'}
+								aria-label="{cancelling ? 'Cancel' : 'Restore'} entry {t.wayNumber}"
+								onclick={() => {
+									target = t;
+									confirmOpen = true;
+								}}
+							>
+							<Icon name={cancelling ? 'x' : 'refresh'} class="h-4 w-4" />
+						</button>
 					</div>
 				</td>
 			</tr>

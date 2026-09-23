@@ -1,5 +1,5 @@
 {
-  "name": "partycalci",
+  "name": "millbooks",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,9 @@
     "deploy": "npm run build && firebase deploy"
   },
   "dependencies": {
-    "firebase": "^12.19.0"
+    "firebase": "^12.19.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",

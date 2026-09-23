@@ -7,11 +7,11 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { parties } from '$lib/stores/parties.svelte';
-	import { getRecentTransactions, setPartyStatus } from '$lib/firebase/firestore';
+	import { getRecentTransactions, getReportTotals, setPartyStatus, type ReportTotals } from '$lib/firebase/firestore';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { friendlyError } from '$lib/utils/errors';
 	import { formatDate, formatDateTime } from '$lib/utils/dates';
-	import { formatKg } from '$lib/utils/format';
+	import { formatCurrency, formatKg, formatNumber } from '$lib/utils/format';
 	import type { Transaction } from '$lib/types';
 
 	const id = $derived(page.params.id ?? '');
@@ -20,6 +20,9 @@
 	let recent = $state<Transaction[]>([]);
 	let loadingTx = $state(true);
 	let txError = $state<string | null>(null);
+
+	let totals = $state<ReportTotals | null>(null);
+	let loadingTotals = $state(true);
 
 	async function loadTx() {
 		loadingTx = true;
@@ -33,10 +36,31 @@
 		}
 	}
 
+	async function loadTotals() {
+		loadingTotals = true;
+		try {
+			totals = await getReportTotals({ dateFrom: '', dateTo: '', status: '', partyIds: [id] });
+		} catch (e) {
+			// The summary is supporting detail; the entries table below still stands on its own.
+			totals = null;
+			console.error(e);
+		} finally {
+			loadingTotals = false;
+		}
+	}
+
 	$effect(() => {
 		void id;
 		loadTx();
+		loadTotals();
 	});
+
+	const summary = $derived([
+		{ label: 'Total Entries', value: totals ? formatNumber(totals.entries) : '—' },
+		{ label: 'Total Weight', value: totals ? formatKg(totals.total) : '—' },
+		{ label: 'Total Bags', value: totals ? formatNumber(totals.bagCount) : '—' },
+		{ label: 'Total Value', value: totals ? formatCurrency(totals.amount) : '—' }
+	]);
 
 	let confirmOpen = $state(false);
 	let busy = $state(false);
@@ -64,7 +88,8 @@
 	<PageHeader title="Party not found" backHref="/parties" backLabel="Parties" />
 	<div class="card"><EmptyState title="This party does not exist." icon="users"><a href="/parties" class="btn-secondary">Back to Parties</a></EmptyState></div>
 {:else}
-	<PageHeader title={party.partyName} backHref="/parties" backLabel="Parties">
+	<PageHeader title={party.partyName} subtitle={party.place || undefined} backHref="/parties" backLabel="Parties">
+		{#snippet badge()}<StatusBadge status={party?.status ?? 'active'} />{/snippet}
 		{#snippet actions()}
 			<button type="button" class="btn-secondary" onclick={() => (confirmOpen = true)}>
 				<Icon name="power" />{party.status === 'active' ? 'Deactivate' : 'Activate'}
@@ -73,19 +98,53 @@
 		{/snippet}
 	</PageHeader>
 
-	<div class="card mb-6 max-w-2xl">
-		<dl class="grid grid-cols-1 gap-x-6 gap-y-4 p-5 sm:grid-cols-2">
-			<div><dt class="text-xs text-slate-500">Party Name</dt><dd class="text-sm font-medium">{party.partyName}</dd></div>
-			<div><dt class="text-xs text-slate-500">Status</dt><dd><StatusBadge status={party.status} /></dd></div>
-			<div><dt class="text-xs text-slate-500">Place</dt><dd class="text-sm">{party.place || '—'}</dd></div>
-			<div><dt class="text-xs text-slate-500">Phone Number</dt><dd class="text-sm tabular-nums">{party.phoneNumber || '—'}</dd></div>
-			<div><dt class="text-xs text-slate-500">Created</dt><dd class="text-sm">{formatDateTime(party.createdAt)}</dd></div>
-			<div><dt class="text-xs text-slate-500">Last Updated</dt><dd class="text-sm">{formatDateTime(party.updatedAt)}</dd></div>
-		</dl>
+	<div class="card mb-4 grid grid-cols-2 divide-slate-200 lg:grid-cols-4 lg:divide-x">
+		{#each summary as s (s.label)}
+			<div class="px-5 py-4">
+				<div class="text-xs font-semibold tracking-wide text-slate-500 uppercase">{s.label}</div>
+				{#if loadingTotals}
+					<div class="mt-2 h-6 w-20 animate-pulse rounded bg-slate-200"></div>
+				{:else}
+					<div class="mt-1 text-xl font-bold text-slate-900">{s.value}</div>
+				{/if}
+			</div>
+		{/each}
 	</div>
 
+	<section class="card mb-6">
+		<header class="border-b border-slate-100 px-5 py-3">
+			<h2 class="text-sm font-semibold text-slate-800">Party Details</h2>
+		</header>
+		<dl class="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-4">
+			<div>
+				<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Party Name</dt>
+				<dd class="mt-1 text-sm font-medium text-slate-900">{party.partyName}</dd>
+			</div>
+			<div>
+				<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Place</dt>
+				<dd class="mt-1 text-sm text-slate-900">{party.place || '—'}</dd>
+			</div>
+			<div>
+				<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Phone Number</dt>
+				<dd class="mt-1 text-sm text-slate-900 tabular-nums">{party.phoneNumber || '—'}</dd>
+			</div>
+			<div>
+				<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Status</dt>
+				<dd class="mt-1"><StatusBadge status={party.status} /></dd>
+			</div>
+			<div>
+				<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Created</dt>
+				<dd class="mt-1 text-sm text-slate-900">{formatDateTime(party.createdAt)}</dd>
+			</div>
+			<div>
+				<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Last Updated</dt>
+				<dd class="mt-1 text-sm text-slate-900">{formatDateTime(party.updatedAt)}</dd>
+			</div>
+		</dl>
+	</section>
+
 	<div class="mb-2 flex items-center justify-between">
-		<h2 class="text-sm font-semibold text-slate-800">Recent Entries</h2>
+		<h2 class="text-base font-semibold text-slate-900">Recent Entries</h2>
 		<a class="btn-link" href="/received-from-party?q={encodeURIComponent(party.phoneNumber || party.partyName)}">View all entries</a>
 	</div>
 	<DataTable loading={loadingTx} error={txError} onretry={loadTx} isEmpty={recent.length === 0}>
@@ -95,8 +154,10 @@
 		{#snippet body()}
 			{#each recent as t (t.id)}
 				<tr class="hover:bg-slate-50">
-					<td class="td">{formatDate(t.transactionDate)}</td>
-					<td class="td"><a class="btn-link" href="/received-from-party/{t.id}">{t.wayNumber}</a></td>
+					<td class="td">
+						<a class="font-medium text-emerald-700 hover:underline" href="/received-from-party/{t.id}">{formatDate(t.transactionDate)}</a>
+					</td>
+					<td class="td"><a class="font-medium text-slate-900 hover:underline" href="/received-from-party/{t.id}">{t.wayNumber}</a></td>
 					<td class="td">{t.itemName}</td>
 					<td class="td num">{formatKg(t.total)}</td>
 					<td class="td num">{formatKg(t.kg)}</td>

@@ -47,7 +47,6 @@
 			itemName: t.itemName,
 			load: t.load,
 			empty: t.empty,
-			bagCount: t.bagCount,
 			freightCharge: t.freightCharge,
 			narration: t.narration,
 			price: t.price,

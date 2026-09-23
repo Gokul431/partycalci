@@ -3,26 +3,482 @@
     {
       "collectionGroup": "received_from_party",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "transactionDate", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "transactionDate",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "received_from_party",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
-        { "fieldPath": "partyId", "order": "ASCENDING" },
-        { "fieldPath": "transactionDate", "order": "DESCENDING" }
+        {
+          "fieldPath": "partyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "transactionDate",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "received_from_party",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
-        { "fieldPath": "partyId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "transactionDate", "order": "DESCENDING" }
+        {
+          "fieldPath": "partyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "transactionDate",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "empty",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "load",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "total",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "amount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "bagCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "freightCharge",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kg",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "transactionDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "empty",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "load",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "total",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "transactionDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "bagCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "freightCharge",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kg",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "empty",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "load",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "total",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "bagCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "freightCharge",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kg",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "transactionDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "empty",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "load",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "total",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "transactionDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "bagCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "freightCharge",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kg",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "partyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "empty",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "load",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "total",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "partyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "bagCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "freightCharge",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kg",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "partyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "transactionDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "empty",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "load",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "total",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "partyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "transactionDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "bagCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "freightCharge",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kg",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "partyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "empty",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "load",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "total",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "partyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "bagCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "freightCharge",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kg",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "partyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "transactionDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "empty",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "load",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "total",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "received_from_party",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "partyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "transactionDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "bagCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "freightCharge",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kg",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],
