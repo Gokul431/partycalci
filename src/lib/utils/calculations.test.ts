@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KG_PER_BAG, calculateBags, calculateKg, calculateTotal } from './calculations';
-import { EMPTY_GT_LOAD, computeWeights, validateParty, validateTransaction } from './validation';
+import { BAGS_EXCEED_TOTAL, EMPTY_GT_LOAD, computeWeights, validateParty, validateTransaction } from './validation';
 import type { TransactionFormValues } from '$lib/types';
 
 // Voucher 74808 from the mill's own listing: Total 6,460 prints as 104 bags and 12 kg.
@@ -12,6 +12,9 @@ const base: TransactionFormValues = {
 	itemName: 'Paddy',
 	load: 10820,
 	empty: 4360,
+	autoCalculate: true,
+	total: null,
+	bagCount: null,
 	freightCharge: null,
 	narration: '',
 	price: null,
@@ -108,5 +111,29 @@ describe('validateParty', () => {
 	it('validates phone numbers', () => {
 		expect(validateParty({ partyName: 'A', place: '', phoneNumber: '12ab', status: 'active' }).ok).toBe(false);
 		expect(validateParty({ partyName: 'A', place: '', phoneNumber: '+91 96265 40553', status: 'active' }).ok).toBe(true);
+	});
+});
+
+describe('manual weights (auto-calculate off)', () => {
+	const manual = { load: null, empty: null, autoCalculate: false, total: 6000, bagCount: 96 };
+
+	it('takes typed Total and Bags and derives Loose Kg', () => {
+		expect(computeWeights(manual)).toMatchObject({ total: 6000, bagCount: 96, kg: 48, errors: {} });
+	});
+	it('makes Load and Empty optional', () => {
+		const r = validateTransaction({ ...base, ...manual });
+		expect(r.ok).toBe(true);
+		if (r.ok) expect(r.data).toMatchObject({ load: null, empty: null, autoCalculate: false, kg: 48 });
+	});
+	it('does not require Total to match Load − Empty', () => {
+		const r = validateTransaction({ ...base, ...manual, load: 9000, empty: 1000 });
+		expect(r.ok && r.data.total).toBe(6000);
+	});
+	it('rejects bags that exceed the total', () => {
+		expect(computeWeights({ ...manual, bagCount: 100 }).errors.bagCount).toBe(BAGS_EXCEED_TOTAL);
+	});
+	it('requires Total and Bags', () => {
+		const { errors } = computeWeights({ ...manual, total: null, bagCount: null });
+		expect(Object.keys(errors).sort()).toEqual(['bagCount', 'total']);
 	});
 });

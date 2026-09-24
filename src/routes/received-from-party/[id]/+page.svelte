@@ -10,7 +10,7 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { friendlyError } from '$lib/utils/errors';
 	import { formatDate, formatDateTime } from '$lib/utils/dates';
-	import { formatCurrency, formatKg, formatNumber, purchaseTypeLabel } from '$lib/utils/format';
+	import { formatCurrency, formatKg, formatNumber, formatWayNumber, purchaseTypeLabel } from '$lib/utils/format';
 	import { KG_PER_BAG } from '$lib/utils/calculations';
 	import type { Transaction } from '$lib/types';
 
@@ -75,7 +75,7 @@
 	<div class="card"><EmptyState title="This entry does not exist." /></div>
 {:else}
 	<PageHeader
-		title="Way No. {tx.wayNumber}"
+		title="Way No. {formatWayNumber(tx.wayNumber, tx.purchaseType)}"
 		subtitle="{purchaseTypeLabel(tx.purchaseType)} · {formatDate(tx.transactionDate)} · {party?.partyName ?? 'Unknown party'}"
 		backHref="/received-from-party"
 		backLabel="Back to List"
@@ -104,7 +104,7 @@
 			<dl class="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2">
 				{@render item('Date', formatDate(tx.transactionDate))}
 				{@render item('Purchase Type', purchaseTypeLabel(tx.purchaseType))}
-				{@render item('Way Number', tx.wayNumber, true)}
+				{@render item('Way Number', formatWayNumber(tx.wayNumber, tx.purchaseType), true)}
 				{@render item('Item Name', tx.itemName)}
 				<div class="sm:col-span-2">
 					<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Party</dt>
@@ -123,11 +123,16 @@
 		</section>
 
 		<section class="card">
-			<h2 class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">Weight Details</h2>
+			<h2 class="flex items-center justify-between border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+				Weight Details
+				{#if !tx.autoCalculate}
+					<span class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-amber-800 uppercase" title="Total and Bags were typed in, not calculated">Manual entry</span>
+				{/if}
+			</h2>
 			<dl class="grid grid-cols-2 gap-x-6 gap-y-5 p-5 sm:grid-cols-3">
 				{@render item('Load', formatKg(tx.load))}
 				{@render item('Empty', formatKg(tx.empty))}
-				{@render item('Total (Load − Empty)', formatKg(tx.total), true)}
+				{@render item(tx.autoCalculate ? 'Total (Load − Empty)' : 'Total (entered)', formatKg(tx.total), true)}
 				{@render item('Number of Bags', formatNumber(tx.bagCount))}
 				{@render item('Loose Kg', formatKg(tx.kg), true)}
 			</dl>

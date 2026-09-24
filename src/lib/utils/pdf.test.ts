@@ -48,6 +48,7 @@ function fixture() {
 				itemName: item,
 				load,
 				empty,
+				autoCalculate: true,
 				total: load - empty,
 				bagCount,
 				kg,

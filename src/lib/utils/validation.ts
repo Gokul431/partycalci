@@ -1,4 +1,4 @@
-import { calculateBags, calculateKg, calculateTotal } from './calculations';
+import { KG_PER_BAG, calculateBags, calculateKg, calculateTotal, looseKg } from './calculations';
 import { parseISODate } from './dates';
 import type { PartyInput, TransactionData, TransactionFormValues } from '$lib/types';
 
@@ -46,13 +46,45 @@ export type TransactionField = keyof TransactionFormValues | 'total' | 'kg';
 export const EMPTY_GT_LOAD = 'Empty weight cannot be greater than Load weight.';
 
 /** Validates the weight inputs and derives Total, Bags and Kg when possible. */
-export function computeWeights(v: Pick<TransactionFormValues, 'load' | 'empty'>): {
+type WeightInput = Pick<TransactionFormValues, 'load' | 'empty'> &
+	Partial<Pick<TransactionFormValues, 'autoCalculate' | 'total' | 'bagCount'>>;
+type WeightField = 'load' | 'empty' | 'total' | 'bagCount';
+
+export const BAGS_EXCEED_TOTAL = `Bags × ${KG_PER_BAG} is more than the Total, so Loose Kg would be negative.`;
+
+/**
+ * Validates the weight inputs and returns Total, Bags and Loose Kg when possible.
+ * Auto (default): everything derives from Load − Empty.
+ * Manual (autoCalculate === false): Total and Bags are typed, Load/Empty are optional,
+ * and Loose Kg is still derived as Total − Bags × KG_PER_BAG.
+ */
+export function computeWeights(v: WeightInput): {
 	total: number | null;
 	bagCount: number | null;
 	kg: number | null;
-	errors: FieldErrors<'load' | 'empty'>;
+	errors: FieldErrors<WeightField>;
 } {
-	const errors: FieldErrors<'load' | 'empty'> = {};
+	const errors: FieldErrors<WeightField> = {};
+	const manual = v.autoCalculate === false;
+
+	if (manual) {
+		if (v.load != null && (!isNum(v.load) || v.load < 0)) errors.load = 'Load must be 0 or more.';
+		if (v.empty != null && (!isNum(v.empty) || v.empty < 0)) errors.empty = 'Empty must be 0 or more.';
+		if (isNum(v.load) && isNum(v.empty) && v.empty > v.load) errors.empty = EMPTY_GT_LOAD;
+
+		const total = v.total ?? null;
+		const bags = v.bagCount ?? null;
+		if (!isNum(total)) errors.total = 'Total is required.';
+		else if (total < 0) errors.total = 'Total must be 0 or more.';
+		if (!isNum(bags)) errors.bagCount = 'Number of bags is required.';
+		else if (bags < 0 || !Number.isInteger(bags)) errors.bagCount = 'Number of bags must be a whole number, 0 or more.';
+
+		if (!isNum(total) || !isNum(bags)) return { total: null, bagCount: null, kg: null, errors };
+		const kg = looseKg(total, bags);
+		if (kg < 0 && !errors.bagCount) errors.bagCount = BAGS_EXCEED_TOTAL;
+		return { total, bagCount: bags, kg, errors };
+	}
+
 	if (!isNum(v.load)) errors.load = 'Load is required.';
 	else if (v.load < 0) errors.load = 'Load must be 0 or more.';
 	if (!isNum(v.empty)) errors.empty = 'Empty is required.';
@@ -124,8 +156,9 @@ export function validateTransaction(v: TransactionFormValues): Result<Transactio
 			wayNumber,
 			partyId: v.partyId,
 			itemName,
-			load: v.load as number,
-			empty: v.empty as number,
+			load: isNum(v.load) ? v.load : null,
+			empty: isNum(v.empty) ? v.empty : null,
+			autoCalculate: v.autoCalculate !== false,
 			total: w.total,
 			bagCount: w.bagCount,
 			kg: w.kg,

@@ -1,4 +1,7 @@
 /**
+ * When auto-calculation is switched off on an entry, the user types Total and Bags
+ * instead, and Kg is still derived as looseKg(total, bags) = Total − Bags × KG_PER_BAG.
+ *
  * Confirmed business rules — the ONLY automatic calculations in the app.
  *   Total = Load - Empty
  *   Bags  = floor(Total / KG_PER_BAG)
@@ -21,7 +24,12 @@ export function calculateBags(total: number): number {
 	return Math.floor(total / KG_PER_BAG);
 }
 
+/** Weight left over after `bagCount` full bags. */
+export function looseKg(total: number, bagCount: number): number {
+	return total - bagCount * KG_PER_BAG;
+}
+
 /** Weight left over after the whole bags — always less than KG_PER_BAG. */
 export function calculateKg(total: number): number {
-	return total - calculateBags(total) * KG_PER_BAG;
+	return looseKg(total, calculateBags(total));
 }

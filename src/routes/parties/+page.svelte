@@ -8,8 +8,13 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import RowActionsMenu from '$lib/components/RowActionsMenu.svelte';
 	import { parties } from '$lib/stores/parties.svelte';
-	import { matchPartyIds, setPartyStatus } from '$lib/firebase/firestore';
+	import { untrack } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { getPartySummary, matchPartyIds, setPartyStatus, type PartySummary } from '$lib/firebase/firestore';
+	import { formatDate } from '$lib/utils/dates';
+	import { formatKg, formatNumber } from '$lib/utils/format';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { friendlyError } from '$lib/utils/errors';
 	import { pageSizeFromUrl } from '$lib/utils/filters';
@@ -33,6 +38,27 @@
 		return list;
 	});
 	const rows = $derived(filtered.slice((pageNo - 1) * pageSize, pageNo * pageSize));
+
+	// Per-party activity (Active entries only), loaded just for the rows on screen.
+	type SummaryState = { state: 'loading' } | { state: 'ready'; data: PartySummary } | { state: 'error' };
+	const summaries = new SvelteMap<string, SummaryState>();
+
+	$effect(() => {
+		for (const p of rows) {
+			if (untrack(() => summaries.has(p.id))) continue;
+			summaries.set(p.id, { state: 'loading' });
+			getPartySummary(p.id)
+				.then((data) => summaries.set(p.id, { state: 'ready', data }))
+				.catch((e) => {
+					console.error(e);
+					summaries.set(p.id, { state: 'error' });
+				});
+		}
+	});
+
+	/** Received From Party list filtered to this party's entries (optionally Active only). */
+	const entriesHref = (p: Party, activeOnly: boolean) =>
+		`/received-from-party?${new URLSearchParams({ q: p.phoneNumber || p.partyName, ...(activeOnly ? { status: 'active' } : {}) })}`;
 	const hasFilters = $derived(!!search.trim() || !!status);
 
 	// Reset to page 1 and sync the URL whenever the filters change.
@@ -62,7 +88,7 @@
 		busy = true;
 		try {
 			await setPartyStatus(target.id, next);
-			toast.success(`${target.partyName} ${next === 'active' ? 'activated' : 'deactivated'}.`);
+			toast.success(`${target.partyName} marked as ${next === 'active' ? 'Active' : 'Inactive'}.`);
 			confirmOpen = false;
 		} catch (e) {
 			toast.error(friendlyError(e, 'Could not update the party status.'));
@@ -102,38 +128,62 @@
 	{#if hasFilters}<button type="button" class="btn-secondary" onclick={reset}>Reset</button>{/if}
 </div>
 
-<DataTable loading={parties.loading} error={parties.error} onretry={() => parties.start()} isEmpty={rows.length === 0} skeletonColumns={5}>
+{#snippet billCount(p: Party, n: number, activeOnly: boolean)}
+	<td class="td num">
+		{#if n > 0}
+			<a
+				href={entriesHref(p, activeOnly)}
+				class="font-medium text-emerald-700 hover:underline"
+				title={activeOnly ? "View this party's active bills" : "View all of this party's bills"}>{formatNumber(n)}</a
+			>
+		{:else}
+			<span class="text-slate-400">0</span>
+		{/if}
+	</td>
+{/snippet}
+
+<DataTable loading={parties.loading} error={parties.error} onretry={() => parties.start()} isEmpty={rows.length === 0} skeletonColumns={9}>
 	{#snippet head()}
 		<tr>
 			<th class="th">Party Name</th><th class="th">Place</th><th class="th">Phone Number</th>
-			<th class="th">Status</th><th class="th text-right">Actions</th>
+			<th class="th num" title="Entries not cancelled">Active Bills</th>
+			<th class="th num" title="All entries, including cancelled">Total Bills</th>
+			<th class="th num" title="Load − Empty across active bills">Total Weight</th><th class="th">Last Entry</th>
+			<th class="th">Status</th><th class="th w-16 text-right">Actions</th>
 		</tr>
 	{/snippet}
 	{#snippet body()}
 		{#each rows as p (p.id)}
-			{@const deactivating = p.status === 'active'}
+			{@const sum = summaries.get(p.id)}
 			<tr class="hover:bg-slate-50">
 				<td class="td"><a href="/parties/{p.id}" class="font-medium text-emerald-700 hover:underline">{p.partyName}</a></td>
 				<td class="td">{p.place || '—'}</td>
 				<td class="td tabular-nums">{p.phoneNumber || '—'}</td>
+				{#if sum?.state === 'ready'}
+					{@render billCount(p, sum.data.entries, true)}
+					{@render billCount(p, sum.data.allEntries, false)}
+					<td class="td num font-medium">{formatKg(sum.data.total)}</td>
+					<td class="td">{sum.data.lastEntry ? formatDate(sum.data.lastEntry) : '—'}</td>
+				{:else if sum?.state === 'error'}
+					<td class="td num text-slate-400" colspan="4" title="Could not load this party's totals">Unavailable</td>
+				{:else}
+					{#each Array(4) as _, i (i)}
+						<td class="td"><div class="ml-auto h-3.5 w-12 animate-pulse rounded bg-slate-200"></div></td>
+					{/each}
+				{/if}
 				<td class="td"><StatusBadge status={p.status} /></td>
 				<td class="td">
-					<div class="flex items-center justify-end gap-1">
-						<a href="/parties/{p.id}" class="icon-action" title="View" aria-label="View {p.partyName}">
-							<Icon name="eye" class="h-4 w-4" />
-						</a>
-						<a href="/parties/{p.id}/edit" class="icon-action" title="Edit" aria-label="Edit {p.partyName}">
-							<Icon name="edit" class="h-4 w-4" />
-						</a>
-							<button
-								type="button"
-								class="icon-action {deactivating ? 'hover:bg-red-50 hover:text-red-600' : 'hover:bg-emerald-50 hover:text-emerald-700'}"
-								title={deactivating ? 'Deactivate' : 'Activate'}
-								aria-label="{deactivating ? 'Deactivate' : 'Activate'} {p.partyName}"
-								onclick={() => askToggle(p)}
-							>
-							<Icon name="power" class="h-4 w-4" />
-						</button>
+					<div class="flex justify-end">
+						<RowActionsMenu
+							label="Actions for {p.partyName}"
+							items={[
+								{ label: 'View', icon: 'eye', href: `/parties/${p.id}` },
+								{ label: 'Edit', icon: 'edit', href: `/parties/${p.id}/edit` },
+								p.status === 'active'
+									? { label: 'Mark as Inactive', icon: 'ban', tone: 'danger', divider: true, onclick: () => askToggle(p) }
+									: { label: 'Mark as Active', icon: 'checkCircle', tone: 'success', divider: true, onclick: () => askToggle(p) }
+							]}
+						/>
 					</div>
 				</td>
 			</tr>
@@ -166,11 +216,11 @@
 
 <ConfirmDialog
 	bind:open={confirmOpen}
-	title={target?.status === 'active' ? 'Deactivate party?' : 'Activate party?'}
+	title={target?.status === 'active' ? 'Mark party as Inactive?' : 'Mark party as Active?'}
 	message={target?.status === 'active'
 		? `${target?.partyName} will no longer appear in the party list for new entries. Existing entries are not affected.`
 		: `${target?.partyName} will be available again for new entries.`}
-	confirmLabel={target?.status === 'active' ? 'Deactivate' : 'Activate'}
+	confirmLabel={target?.status === 'active' ? 'Mark as Inactive' : 'Mark as Active'}
 	tone={target?.status === 'active' ? 'danger' : 'primary'}
 	{busy}
 	onconfirm={toggle}

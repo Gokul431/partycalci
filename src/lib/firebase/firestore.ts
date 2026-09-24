@@ -39,6 +39,7 @@ import type {
 import { validateParty, validateTransaction } from '$lib/utils/validation';
 import { addDays, parseISODate, toISODate } from '$lib/utils/dates';
 import { AppError } from '$lib/utils/errors';
+import { formatWayNumber, wayNumberBase } from '$lib/utils/format';
 
 export const db = getFirestore(app);
 
@@ -134,8 +135,10 @@ function toTransaction(snap: QueryDocumentSnapshot<DocumentData>): Transaction {
 		wayNumber: str(d.wayNumber),
 		partyId: str(d.partyId),
 		itemName: str(d.itemName),
-		load: num(d.load),
-		empty: num(d.empty),
+		load: typeof d.load === 'number' ? d.load : null,
+		empty: typeof d.empty === 'number' ? d.empty : null,
+		// Entries saved before the toggle existed were always auto-calculated.
+		autoCalculate: d.autoCalculate !== false,
 		total: num(d.total),
 		bagCount: num(d.bagCount),
 		kg: num(d.kg),
@@ -200,6 +203,8 @@ export interface ResolvedFilters {
 	dateTo: string;
 	status: Status | '';
 	partyIds: string[] | null;
+	/** Raw search text, also tried as a way number prefix before the party match applies. */
+	search?: string;
 }
 
 export function resolveFilters(filters: TransactionFilters, parties: Party[]): ResolvedFilters {
@@ -208,8 +213,67 @@ export function resolveFilters(filters: TransactionFilters, parties: Party[]): R
 		dateFrom: filters.dateFrom,
 		dateTo: filters.dateTo,
 		status: filters.status,
-		partyIds: search ? matchPartyIds(parties, search) : null
+		partyIds: search ? matchPartyIds(parties, search) : null,
+		search
 	};
+}
+
+/** Max entries read per case variant when searching by way number. */
+const WAY_NUMBER_MATCH_LIMIT = 100;
+
+interface WayNumberHit {
+	snap: QueryDocumentSnapshot<DocumentData>;
+	tx: Transaction;
+}
+
+/**
+ * Entries whose way number starts with the search text (as typed, upper- or lower-case),
+ * with the date and status filters applied, newest first. Returns null when nothing
+ * matches by way number, so the search falls back to party name / phone.
+ * Single-field range queries only, so no composite index is needed.
+ */
+async function wayNumberHits(f: ResolvedFilters): Promise<WayNumberHit[] | null> {
+	const text = f.search?.trim();
+	if (!text) return null;
+	// The list shows way numbers with a -P/-R suffix taken from the type, which may differ
+	// from what was typed. Query by the bare number, then match against either form.
+	const base = wayNumberBase(text) || text;
+	const variants = [...new Set([base, base.toUpperCase(), base.toLowerCase()])];
+	const needle = text.toLowerCase();
+	const matches = (tx: Transaction) =>
+		tx.wayNumber.toLowerCase().startsWith(needle) ||
+		formatWayNumber(tx.wayNumber, tx.purchaseType).toLowerCase().startsWith(needle);
+	const snaps = await Promise.all(
+		variants.map((v) =>
+			getDocs(
+				query(
+					txCol,
+					where('wayNumber', '>=', v),
+					where('wayNumber', '<=', v + '\uf8ff'),
+					limit(WAY_NUMBER_MATCH_LIMIT)
+				)
+			)
+		)
+	);
+	const byId = new Map<string, WayNumberHit>();
+	for (const snap of snaps)
+		for (const d of snap.docs) {
+			const tx = toTransaction(d);
+			if (matches(tx)) byId.set(d.id, { snap: d, tx });
+		}
+	if (byId.size === 0) return null;
+
+	const from = f.dateFrom ? parseISODate(f.dateFrom) : null;
+	const to = f.dateTo ? parseISODate(f.dateTo) : null;
+	const end = to ? addDays(to, 1) : null;
+	return [...byId.values()]
+		.filter(
+			({ tx }) =>
+				(!f.status || tx.status === f.status) &&
+				(!from || tx.transactionDate >= from) &&
+				(!end || tx.transactionDate < end)
+		)
+		.sort((a, b) => b.tx.transactionDate.getTime() - a.tx.transactionDate.getTime() || a.tx.id.localeCompare(b.tx.id));
 }
 
 function filterConstraints(f: ResolvedFilters, partyIds: string[] | null): QueryFilterConstraint[] {
@@ -252,10 +316,19 @@ export async function listTransactions(
 	pageSize: number,
 	after: QueryDocumentSnapshot<DocumentData> | null
 ): Promise<TransactionPage> {
+	const hits = await wayNumberHits(f);
+	if (hits) {
+		const start = after ? hits.findIndex((h) => h.snap.id === after.id) + 1 : 0;
+		const pageHits = hits.slice(start, start + pageSize);
+		return {
+			rows: pageHits.map((h) => h.tx),
+			nextCursor: start + pageSize < hits.length ? pageHits[pageHits.length - 1].snap : null
+		};
+	}
 	if (f.partyIds && f.partyIds.length === 0) return { rows: [], nextCursor: null };
 	if (f.partyIds && f.partyIds.length > MAX_PARTY_MATCHES) {
 		throw new AppError(
-			`Your party search matches more than ${MAX_PARTY_MATCHES} parties. Please type more of the name or phone number.`
+			`Your search matches more than ${MAX_PARTY_MATCHES} parties. Please type more of the name, phone or way number.`
 		);
 	}
 	const extra: QueryConstraint[] = [limit(pageSize + 1)];
@@ -273,6 +346,8 @@ const EXPORT_PAGE_SIZE = 500;
 
 /** Every row matching the filters, newest first, for export. Capped so a broad filter cannot run away. */
 export async function fetchAllTransactions(f: ResolvedFilters, cap = 5000): Promise<Transaction[]> {
+	const hits = await wayNumberHits(f);
+	if (hits) return hits.map((h) => h.tx);
 	if (f.partyIds && f.partyIds.length === 0) return [];
 	if (f.partyIds && f.partyIds.length > MAX_PARTY_MATCHES) {
 		throw new AppError(
@@ -299,6 +374,8 @@ function partyChunks(f: ResolvedFilters): (string[] | null)[] {
 }
 
 export async function countTransactions(f: ResolvedFilters): Promise<number> {
+	const hits = await wayNumberHits(f);
+	if (hits) return hits.length;
 	const counts = await Promise.all(
 		partyChunks(f).map((ids) =>
 			getCountFromServer(buildFilteredQuery(f, ids)).then((s) => s.data().count)
@@ -324,6 +401,17 @@ const EMPTY_TOTALS: ReportTotals = {
 
 /** Server-side aggregation (Firestore allows 5 aggregations per request, so this uses two). */
 export async function getReportTotals(f: ResolvedFilters): Promise<ReportTotals> {
+	const hits = await wayNumberHits(f);
+	if (hits) {
+		return hits.reduce(
+			(acc, { tx }) => {
+				acc.entries += 1;
+				for (const k of ['load', 'empty', 'total', 'bagCount', 'kg', 'freightCharge', 'amount'] as const) acc[k] += tx[k] ?? 0;
+				return acc;
+			},
+			{ ...EMPTY_TOTALS }
+		);
+	}
 	const results = await Promise.all(
 		partyChunks(f).map(async (ids) => {
 			if (ids && ids.length === 0) return EMPTY_TOTALS;
@@ -353,6 +441,48 @@ export async function getReportTotals(f: ResolvedFilters): Promise<ReportTotals>
 		},
 		{ ...EMPTY_TOTALS }
 	);
+}
+
+// ----------------------------------------------------------- Party summary
+
+export interface PartySummary {
+	/** Active entries (bills); the weight totals below cover these only. */
+	entries: number;
+	/** All entries including cancelled (Inactive) ones. */
+	allEntries: number;
+	total: number;
+	bagCount: number;
+	kg: number;
+	lastEntry: Date | null;
+}
+
+/**
+ * Activity for one party across its Active entries (cancelled entries are excluded):
+ * count, weight/bag/kg totals via server aggregation, and the latest entry date.
+ * Uses the existing (partyId, status, …) indexes.
+ */
+export async function getPartySummary(partyId: string): Promise<PartySummary> {
+	const [totals, all, last] = await Promise.all([
+		getReportTotals({ dateFrom: '', dateTo: '', status: 'active', partyIds: [partyId] }),
+		getCountFromServer(query(txCol, where('partyId', '==', partyId))),
+		getDocs(
+			query(
+				txCol,
+				where('partyId', '==', partyId),
+				where('status', '==', 'active'),
+				orderBy('transactionDate', 'desc'),
+				limit(1)
+			)
+		)
+	]);
+	return {
+		entries: totals.entries,
+		allEntries: all.data().count,
+		total: totals.total,
+		bagCount: totals.bagCount,
+		kg: totals.kg,
+		lastEntry: last.docs[0] ? toTransaction(last.docs[0]).transactionDate : null
+	};
 }
 
 // --------------------------------------------------------------- Dashboard

@@ -3,6 +3,7 @@
 	import { PURCHASE_TYPE_OPTIONS, STATUS_OPTIONS } from '$lib/types';
 	import { KG_PER_BAG } from '$lib/utils/calculations';
 	import {
+		BAGS_EXCEED_TOTAL,
 		computeWeights,
 		validateTransaction,
 		type FieldErrors,
@@ -40,6 +41,9 @@
 			itemName: '',
 			load: null,
 			empty: null,
+			autoCalculate: true,
+			total: null,
+			bagCount: null,
 			freightCharge: null,
 			narration: '',
 			price: null,
@@ -58,8 +62,20 @@
 		// Before first submit, surface only the weight-rule errors as the user types.
 		const live: FieldErrors<TransactionField> = {};
 		if (v.load != null && v.empty != null && weights.errors.empty) live.empty = weights.errors.empty;
+		if (weights.errors.bagCount === BAGS_EXCEED_TOTAL) live.bagCount = weights.errors.bagCount;
 		return live;
 	});
+
+	const manual = $derived(!v.autoCalculate);
+
+	function setAutoCalculate(on: boolean) {
+		// Switching to manual starts from the current calculated values, so nothing is lost.
+		if (!on) {
+			v.total ??= weights.total;
+			v.bagCount ??= weights.bagCount;
+		}
+		v.autoCalculate = on;
+	}
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
@@ -123,26 +139,62 @@
 	</section>
 
 	<section class="card">
-		<h2 class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">Weight Details</h2>
+		<div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
+			<h2 class="text-sm font-semibold text-slate-800">Weight Details</h2>
+			<label class="flex cursor-pointer items-center gap-2.5 text-sm text-slate-700">
+				<span>Auto-calculate Total &amp; Bags</span>
+				<button
+					type="button"
+					role="switch"
+					aria-checked={v.autoCalculate}
+					aria-label="Auto-calculate Total and Bags"
+					onclick={() => setAutoCalculate(!v.autoCalculate)}
+					class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-emerald-600/40 focus-visible:outline-none {v.autoCalculate
+						? 'bg-emerald-600'
+						: 'bg-slate-300'}"
+				>
+					<span class="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform {v.autoCalculate ? 'translate-x-4.5' : 'translate-x-0.5'}"></span>
+				</button>
+				<span class="w-7 text-xs font-semibold {v.autoCalculate ? 'text-emerald-700' : 'text-slate-500'}">{v.autoCalculate ? 'ON' : 'OFF'}</span>
+			</label>
+		</div>
+		{#if manual}
+			<p class="mx-5 mt-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+				Manual entry: type the Total and Number of Bags. Load and Empty are optional. Loose Kg is still Total − Bags × {KG_PER_BAG}.
+			</p>
+		{/if}
 		<div class="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-4">
 			<div>
-				<label class="label" for="load">Load (kg) {@render req()}</label>
+				<label class="label" for="load">Load (kg) {#if manual}<span class="font-normal text-slate-400">— optional</span>{:else}{@render req()}{/if}</label>
 				<input id="load" type="number" inputmode="decimal" min="0" step="any" class="input {errors.load ? 'input-error' : ''}" bind:value={v.load} placeholder="e.g. 7500" />
 				{@render err('load')}
 			</div>
 			<div>
-				<label class="label" for="empty">Empty (kg) {@render req()}</label>
+				<label class="label" for="empty">Empty (kg) {#if manual}<span class="font-normal text-slate-400">— optional</span>{:else}{@render req()}{/if}</label>
 				<input id="empty" type="number" inputmode="decimal" min="0" step="any" class="input {errors.empty ? 'input-error' : ''}" bind:value={v.empty} placeholder="e.g. 2500" />
 				{@render err('empty')}
 			</div>
-			<div>
-				<label class="label" for="total">Total (kg) <span class="font-normal text-slate-400">— Load − Empty</span></label>
-				<input id="total" class="input-readonly" readonly tabindex="-1" value={weights.total == null ? '' : formatNumber(weights.total)} placeholder="Auto calculated" />
-			</div>
-			<div>
-				<label class="label" for="bagCount">Number of Bags <span class="font-normal text-slate-400">— Total ÷ {KG_PER_BAG}</span></label>
-				<input id="bagCount" class="input-readonly" readonly tabindex="-1" value={weights.bagCount == null ? '' : formatNumber(weights.bagCount)} placeholder="Auto calculated" />
-			</div>
+			{#if manual}
+				<div>
+					<label class="label" for="total">Total (kg) {@render req()}</label>
+					<input id="total" type="number" inputmode="decimal" min="0" step="any" class="input {errors.total ? 'input-error' : ''}" bind:value={v.total} placeholder="e.g. 6000" />
+					{@render err('total')}
+				</div>
+				<div>
+					<label class="label" for="bagCount">Number of Bags {@render req()}</label>
+					<input id="bagCount" type="number" inputmode="numeric" min="0" step="1" class="input {errors.bagCount ? 'input-error' : ''}" bind:value={v.bagCount} placeholder="e.g. 96" />
+					{@render err('bagCount')}
+				</div>
+			{:else}
+				<div>
+					<label class="label" for="total">Total (kg) <span class="font-normal text-slate-400">— Load − Empty</span></label>
+					<input id="total" class="input-readonly" readonly tabindex="-1" value={weights.total == null ? '' : formatNumber(weights.total)} placeholder="Auto calculated" />
+				</div>
+				<div>
+					<label class="label" for="bagCount">Number of Bags <span class="font-normal text-slate-400">— Total ÷ {KG_PER_BAG}</span></label>
+					<input id="bagCount" class="input-readonly" readonly tabindex="-1" value={weights.bagCount == null ? '' : formatNumber(weights.bagCount)} placeholder="Auto calculated" />
+				</div>
+			{/if}
 		</div>
 
 		<div class="mx-5 mb-5 overflow-hidden rounded-lg border border-slate-200" aria-live="polite">
@@ -164,6 +216,8 @@
 				{#if weights.total != null}
 					{formatNumber(weights.total)} kg = {formatNumber(weights.bagCount)} bag{weights.bagCount === 1 ? '' : 's'}
 					× {KG_PER_BAG} + {formatNumber(weights.kg)} kg
+				{:else if manual}
+					Type the Total and Number of Bags; the Loose Kg is Total − Bags × {KG_PER_BAG}.
 				{:else}
 					Total ÷ {KG_PER_BAG} gives the bags; the remainder is the loose Kg.
 				{/if}

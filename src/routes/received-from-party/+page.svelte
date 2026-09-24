@@ -8,10 +8,10 @@
 	import DataTable from '$lib/components/DataTable.svelte';
 	import Pagination from '$lib/components/Pagination.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
-	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import ReportDialog from '$lib/components/ReportDialog.svelte';
+	import RowActionsMenu from '$lib/components/RowActionsMenu.svelte';
 	import {
 		countTransactions,
 		fetchAllTransactions,
@@ -25,7 +25,7 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { friendlyError } from '$lib/utils/errors';
 	import { formatDate } from '$lib/utils/dates';
-	import { formatCurrency, formatNumber, purchaseTypeLabel } from '$lib/utils/format';
+	import { formatCurrency, formatNumber, formatWayNumber, purchaseTypeLabel } from '$lib/utils/format';
 	import {
 		FILTER_DEBOUNCE_MS,
 		filtersFromUrl,
@@ -134,7 +134,7 @@
 
 	const pdfNote = $derived(
 		[
-			filters.search.trim() ? `party matching "${filters.search.trim()}"` : '',
+			filters.search.trim() ? `search "${filters.search.trim()}"` : '',
 			filters.status ? `status ${filters.status}` : ''
 		]
 			.filter(Boolean)
@@ -159,10 +159,15 @@
 		}
 	}
 
-	// Cancel / restore (soft status change, never a hard delete)
+	// Status change (soft — entries are never hard-deleted)
 	let confirmOpen = $state(false);
 	let target = $state<Transaction | null>(null);
 	let busy = $state(false);
+
+	function askStatus(t: Transaction) {
+		target = t;
+		confirmOpen = true;
+	}
 
 	async function toggleStatus() {
 		if (!target) return;
@@ -170,7 +175,7 @@
 		busy = true;
 		try {
 			await setTransactionStatus(target.id, next);
-			toast.success(next === 'inactive' ? 'Entry cancelled (marked inactive).' : 'Entry restored (marked active).');
+			toast.success(`Entry ${formatWayNumber(target.wayNumber, target.purchaseType)} marked as ${next === 'active' ? 'Active' : 'Inactive'}.`);
 			confirmOpen = false;
 			fetchPage(pageIndex);
 			fetchCount();
@@ -206,26 +211,33 @@
 	onreset={() => applyFilters(EMPTY_FILTERS)}
 />
 
-<DataTable {loading} {error} onretry={reload} isEmpty={rows.length === 0} skeletonColumns={10}>
+<DataTable {loading} {error} onretry={reload} isEmpty={rows.length === 0} skeletonColumns={7}>
 	{#snippet head()}
 		<tr>
 			<th class="th">Date</th><th class="th">Type</th><th class="th">Way No</th><th class="th">Party</th>
 			<th class="th">Item</th><th class="th num">Load</th><th class="th num">Empty</th><th class="th num">Total</th>
-			<th class="th num">Bags</th><th class="th num">Kg</th><th class="th num">Freight</th><th class="th">Narration</th>
-			<th class="th num">Price</th><th class="th num">Amount</th><th class="th">Status</th>
-			<th class="th sticky right-0 bg-slate-50 text-right">Actions</th>
+			<th class="th num">Bags</th><th class="th num">Kg</th><th class="th num">Freight</th>
+			<th class="th sticky right-0 w-16 bg-slate-50 text-right">Actions</th>
 		</tr>
 	{/snippet}
 	{#snippet body()}
 		{#each rows as t (t.id)}
 			{@const party = parties.byId.get(t.partyId)}
-			{@const cancelling = t.status === 'active'}
-			<tr class="group hover:bg-slate-50 {t.status === 'inactive' ? 'text-slate-400' : ''}">
+			<!-- Inactive entries: faded row (actions stay full strength) + tag beside the way number. -->
+			<tr
+				class="group hover:bg-slate-50 {t.status === 'inactive' ? 'bg-slate-50/60 [&>td:not(:last-child)]:opacity-55' : ''}"
+				title={t.status === 'inactive' ? 'Inactive entry' : undefined}
+			>
 				<td class="td">
 					<a class="font-medium text-emerald-700 hover:underline" href="/received-from-party/{t.id}">{formatDate(t.transactionDate)}</a>
 				</td>
 				<td class="td">{purchaseTypeLabel(t.purchaseType)}</td>
-				<td class="td"><a class="font-medium text-slate-900 hover:underline" href="/received-from-party/{t.id}">{t.wayNumber}</a></td>
+				<td class="td">
+					<a class="font-medium text-slate-900 hover:underline" href="/received-from-party/{t.id}">{formatWayNumber(t.wayNumber, t.purchaseType)}</a>
+					{#if t.status === 'inactive'}
+						<span class="ml-1.5 rounded bg-slate-200 px-1.5 py-0.5 align-middle text-[10px] font-semibold tracking-wide text-slate-600 uppercase">Inactive</span>
+					{/if}
+				</td>
 				<td class="td">
 					<div class="font-medium text-slate-900">{party?.partyName ?? 'Unknown party'}</div>
 					{#if party?.phoneNumber}<div class="text-xs text-slate-500 tabular-nums">{party.phoneNumber}</div>{/if}
@@ -237,30 +249,18 @@
 				<td class="td num">{formatNumber(t.bagCount)}</td>
 				<td class="td num font-medium">{formatNumber(t.kg)}</td>
 				<td class="td num">{formatCurrency(t.freightCharge)}</td>
-				<td class="td max-w-48 truncate" title={t.narration}>{t.narration || '—'}</td>
-				<td class="td num">{formatCurrency(t.price)}</td>
-				<td class="td num">{formatCurrency(t.amount)}</td>
-				<td class="td"><StatusBadge status={t.status} /></td>
-				<td class="td sticky right-0 bg-white group-hover:bg-slate-50">
-					<div class="flex items-center justify-end gap-1">
-						<a href="/received-from-party/{t.id}" class="icon-action" title="View" aria-label="View entry {t.wayNumber}">
-							<Icon name="eye" class="h-4 w-4" />
-						</a>
-						<a href="/received-from-party/{t.id}/edit" class="icon-action" title="Edit" aria-label="Edit entry {t.wayNumber}">
-							<Icon name="edit" class="h-4 w-4" />
-						</a>
-							<button
-								type="button"
-								class="icon-action {cancelling ? 'hover:bg-red-50 hover:text-red-600' : 'hover:bg-emerald-50 hover:text-emerald-700'}"
-								title={cancelling ? 'Cancel' : 'Restore'}
-								aria-label="{cancelling ? 'Cancel' : 'Restore'} entry {t.wayNumber}"
-								onclick={() => {
-									target = t;
-									confirmOpen = true;
-								}}
-							>
-							<Icon name={cancelling ? 'x' : 'refresh'} class="h-4 w-4" />
-						</button>
+				<td class="td sticky right-0 group-hover:bg-slate-50 {t.status === 'inactive' ? 'bg-slate-50' : 'bg-white'}">
+					<div class="flex justify-end">
+						<RowActionsMenu
+							label="Actions for entry {formatWayNumber(t.wayNumber, t.purchaseType)}"
+							items={[
+								{ label: 'View', icon: 'eye', href: `/received-from-party/${t.id}` },
+								{ label: 'Edit', icon: 'edit', href: `/received-from-party/${t.id}/edit` },
+								t.status === 'active'
+									? { label: 'Mark as Inactive', icon: 'ban', tone: 'danger', divider: true, onclick: () => askStatus(t) }
+									: { label: 'Mark as Active', icon: 'checkCircle', tone: 'success', divider: true, onclick: () => askStatus(t) }
+							]}
+						/>
 					</div>
 				</td>
 			</tr>
@@ -294,11 +294,11 @@
 
 <ConfirmDialog
 	bind:open={confirmOpen}
-	title={target?.status === 'active' ? 'Cancel this entry?' : 'Restore this entry?'}
+	title={target?.status === 'active' ? 'Mark entry as Inactive?' : 'Mark entry as Active?'}
 	message={target?.status === 'active'
-		? `Way number ${target?.wayNumber} will be marked Inactive. The record is kept and can be restored later.`
-		: `Way number ${target?.wayNumber} will be marked Active again.`}
-	confirmLabel={target?.status === 'active' ? 'Cancel Entry' : 'Restore Entry'}
+		? `Way number ${target ? formatWayNumber(target.wayNumber, target.purchaseType) : ''} will be marked Inactive. The record is kept and can be restored later.`
+		: `Way number ${target ? formatWayNumber(target.wayNumber, target.purchaseType) : ''} will be marked Active again.`}
+	confirmLabel={target?.status === 'active' ? 'Mark as Inactive' : 'Mark as Active'}
 	tone={target?.status === 'active' ? 'danger' : 'primary'}
 	{busy}
 	onconfirm={toggleStatus}

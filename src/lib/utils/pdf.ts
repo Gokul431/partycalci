@@ -1,5 +1,7 @@
 import type { Party, Transaction, TransactionFilters } from '$lib/types';
 import { parseISODate } from './dates';
+import { formatWayNumber } from './format';
+import { canShape, loadShapingFont, needsShaping, shapeText, type ShapedText } from './pdfShaping';
 
 /** Printed on the report header — change these to rebrand the voucher listing. */
 export const MILL_NAME = 'Elumalayan Modern Rice Mill';
@@ -21,6 +23,7 @@ const paddedDate = (d: Date) =>
 	`${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
 
 const FONT_SIZE = 8;
+const CELL_PADDING = 3;
 
 /**
  * Widths sum to the printable width of A4 portrait at a 28pt margin, and each one clears
@@ -48,6 +51,33 @@ const COLUMNS = [
 /** Index of the Qty column, which the Grand Total sits under. */
 const QTY_INDEX = 7;
 
+/**
+ * Pre-renders every body cell holding Tamil (or other complex-script) text, keyed
+ * "row:column". Empty outside a browser, where cells fall back to plain text.
+ */
+async function shapeCells(body: string[][]): Promise<Map<string, ShapedText>> {
+	const shaped = new Map<string, ShapedText>();
+	if (!canShape() || !body.some((row) => row.some(needsShaping))) return shaped;
+	try {
+		await loadShapingFont();
+	} catch (e) {
+		// The browser still shapes with any installed Tamil font; only the typeface differs.
+		console.warn('Tamil PDF font failed to load; using a system font.', e);
+	}
+	// A party's name repeats on every one of its rows: render (and embed) it once.
+	const byText = new Map<string, ShapedText>();
+	body.forEach((row, r) =>
+		row.forEach((text, c) => {
+			if (!needsShaping(text)) return;
+			const key = `${c}\u0000${text}`;
+			let s = byText.get(key);
+			if (!s) byText.set(key, (s = shapeText(text, FONT_SIZE, COLUMNS[c].width - CELL_PADDING * 2)));
+			shaped.set(`${r}:${c}`, s);
+		})
+	);
+	return shaped;
+}
+
 function rangeLabel(rows: Transaction[], filters: TransactionFilters): string {
 	const dates = rows.map((r) => r.transactionDate.getTime());
 	const from = parseISODate(filters.dateFrom) ?? (dates.length ? new Date(Math.min(...dates)) : null);
@@ -59,12 +89,13 @@ function rangeLabel(rows: Transaction[], filters: TransactionFilters): string {
 function bodyRow(t: Transaction, party: Party | undefined): string[] {
 	return [
 		paddedDate(t.transactionDate),
-		t.wayNumber,
+		formatWayNumber(t.wayNumber, t.purchaseType),
 		[party?.partyName, party?.place].filter(Boolean).join(' '),
 		party?.phoneNumber ?? '',
 		t.itemName,
-		count(t.load),
-		count(t.empty),
+		// Blank on manual entries where Load/Empty were not recorded.
+		t.load == null ? '' : count(t.load),
+		t.empty == null ? '' : count(t.empty),
 		money(t.total),
 		count(t.bagCount),
 		count(t.kg),
@@ -100,10 +131,14 @@ export async function buildVoucherListing(
 	const pageWidth = doc.internal.pageSize.getWidth();
 	const range = rangeLabel(ordered, filters);
 	const grandTotal = ordered.reduce((sum, t) => sum + t.total, 0);
+	const body = ordered.map((t) => bodyRow(t, partyById.get(t.partyId)));
+	const shaped = await shapeCells(body);
+	const shapedCell = (section: string, row: number, col: number) =>
+		section === 'body' ? shaped.get(`${row}:${col}`) : undefined;
 
 	autoTable(doc, {
 		head: [COLUMNS.map((c) => c.header)],
-		body: ordered.map((t) => bodyRow(t, partyById.get(t.partyId))),
+		body,
 		foot: [
 			[
 				{ content: 'Grand Total', colSpan: QTY_INDEX, styles: { halign: 'right' } },
@@ -116,14 +151,28 @@ export async function buildVoucherListing(
 			]
 		],
 		theme: 'grid',
+		// A shaped (image) cell cannot be split, so rows move to the next page whole.
+		rowPageBreak: 'avoid',
 		startY: PAGE_MARGIN + HEADER_HEIGHT,
 		margin: { top: PAGE_MARGIN + HEADER_HEIGHT, right: PAGE_MARGIN, bottom: PAGE_MARGIN, left: PAGE_MARGIN },
-		styles: { font: 'helvetica', fontSize: FONT_SIZE, cellPadding: 3, lineColor: 0, lineWidth: 0.5, textColor: 0 },
+		styles: { font: 'helvetica', fontSize: FONT_SIZE, cellPadding: CELL_PADDING, lineColor: 0, lineWidth: 0.5, textColor: 0 },
 		headStyles: { fillColor: false, fontStyle: 'bold', textColor: 0 },
 		footStyles: { fillColor: false, fontStyle: 'bold', textColor: 0 },
 		columnStyles: Object.fromEntries(
 			COLUMNS.map((c, i) => [i, { cellWidth: c.width, halign: c.align }])
 		),
+		// Shaped cells: blank text lines reserve the height, then the rendered image is drawn in.
+		didParseCell(data) {
+			const s = shapedCell(data.section, data.row.index, data.column.index);
+			if (s) data.cell.text = Array(Math.ceil(s.height / (FONT_SIZE * doc.getLineHeightFactor()))).fill('');
+		},
+		didDrawCell(data) {
+			const s = shapedCell(data.section, data.row.index, data.column.index);
+			if (!s) return;
+			const x = data.cell.x + data.cell.padding('left');
+			const y = data.cell.y + data.cell.padding('top');
+			doc.addImage(s.image, 'PNG', x, y, s.width, s.height, s.alias, 'FAST');
+		},
 		didDrawPage() {
 			doc.setLineWidth(0.5);
 			doc.rect(PAGE_MARGIN, PAGE_MARGIN, pageWidth - PAGE_MARGIN * 2, HEADER_HEIGHT);

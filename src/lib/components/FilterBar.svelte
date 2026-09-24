@@ -37,10 +37,10 @@
 			<input id="f-to" type="date" class="input" bind:value={filters.dateTo} min={filters.dateFrom || undefined} />
 		</div>
 		<div>
-			<label class="label" for="f-search">Party Name / Phone</label>
+			<label class="label" for="f-search">Party / Phone / Way No</label>
 			<div class="relative">
 				<Icon name="search" class="pointer-events-none absolute top-2.5 left-2.5 h-4 w-4 text-slate-400" />
-				<input id="f-search" type="search" class="input pl-8" placeholder="Search party name or phone..." bind:value={filters.search} />
+				<input id="f-search" type="search" class="input pl-8" placeholder="Search party name, phone or way no..." bind:value={filters.search} />
 			</div>
 		</div>
 		<div>

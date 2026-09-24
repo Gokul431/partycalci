@@ -38,8 +38,11 @@ export interface Transaction {
 	wayNumber: string;
 	partyId: string;
 	itemName: string;
-	load: number;
-	empty: number;
+	/** Null only on manually entered entries where Load/Empty were left blank. */
+	load: number | null;
+	empty: number | null;
+	/** True: Total/Bags/Kg derived from Load − Empty. False: Total and Bags typed by the user. */
+	autoCalculate: boolean;
 	total: number;
 	bagCount: number;
 	kg: number;
@@ -61,6 +64,10 @@ export interface TransactionFormValues {
 	itemName: string;
 	load: number | null;
 	empty: number | null;
+	autoCalculate: boolean;
+	/** Typed Total and Bags — used only when autoCalculate is off. */
+	total: number | null;
+	bagCount: number | null;
 	freightCharge: number | null;
 	narration: string;
 	price: number | null;

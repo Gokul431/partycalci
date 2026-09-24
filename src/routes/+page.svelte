@@ -12,7 +12,7 @@
 	import { session } from '$lib/stores/session.svelte';
 	import { friendlyError } from '$lib/utils/errors';
 	import { formatDate } from '$lib/utils/dates';
-	import { formatCurrency, formatKg, formatNumber } from '$lib/utils/format';
+	import { formatCurrency, formatKg, formatNumber, formatWayNumber } from '$lib/utils/format';
 	import type { Transaction } from '$lib/types';
 
 	let stats = $state<Awaited<ReturnType<typeof getDashboardStats>> | null>(null);
@@ -169,7 +169,7 @@
 				<td class="td">
 					<a class="font-medium text-emerald-700 hover:underline" href="/received-from-party/{t.id}">{formatDate(t.transactionDate)}</a>
 				</td>
-				<td class="td"><a class="font-medium text-slate-900 hover:underline" href="/received-from-party/{t.id}">{t.wayNumber}</a></td>
+				<td class="td"><a class="font-medium text-slate-900 hover:underline" href="/received-from-party/{t.id}">{formatWayNumber(t.wayNumber, t.purchaseType)}</a></td>
 				<td class="td">{parties.byId.get(t.partyId)?.partyName ?? '—'}</td>
 				<td class="td">{t.itemName}</td>
 				<td class="td num">{formatKg(t.total)}</td>
