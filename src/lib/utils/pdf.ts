@@ -1,4 +1,5 @@
 import type { Party, Transaction, TransactionFilters } from '$lib/types';
+import { calculateTotalAmount } from './calculations';
 import { parseISODate } from './dates';
 import { formatWayNumber } from './format';
 import { canShape, loadShapingFont, needsShaping, shapeText, type ShapedText } from './pdfShaping';
@@ -11,10 +12,10 @@ const VOUCHER_SERIES = 'Main';
 const PAGE_MARGIN = 28;
 const HEADER_HEIGHT = 58;
 
-const decimal = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const grouped = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
 
-/** Qty and money: Indian grouping with two decimals, as the voucher listing prints them. */
-const money = (n: number) => decimal.format(n);
+/** Qty and money: whole rupees with Indian grouping — 5,008 rather than 5,008.00. */
+const money = (n: number) => grouped.format(n);
 /** Load, Empty, Bag and Kg print as bare integers with no grouping. */
 const count = (n: number) => String(Math.round(n));
 /** Header range is loose d-m-yyyy; the rows themselves stay zero-padded. */
@@ -33,23 +34,29 @@ const CELL_PADDING = 3;
 const COLUMNS = [
 	{ header: 'Date', width: 47, align: 'left' },
 	{ header: 'Way No:', width: 42, align: 'left' },
-	{ header: 'Particulars', width: 62, align: 'left' },
-	{ header: 'Mobile', width: 50, align: 'left' },
-	{ header: 'Item Details', width: 51, align: 'left' },
+	// Every point left over goes here: party names are the only values long enough to wrap.
+	{ header: 'Particulars', width: 81, align: 'left' },
+	{ header: 'Item', width: 41, align: 'left' },
 	{ header: 'Load', width: 28, align: 'right' },
 	{ header: 'Empty', width: 31, align: 'right' },
-	// Qty carries the Grand Total, which is far wider than any single row's value.
-	{ header: 'Qty.', width: 55, align: 'right' },
+	{ header: 'Qty.', width: 31, align: 'right' },
 	{ header: 'Bag', width: 24, align: 'right' },
-	{ header: 'Kg', width: 30, align: 'right' },
-	{ header: 'Freight', width: 47, align: 'right' },
-	// Price always prints blank, so it only has to hold its own header.
-	{ header: 'Price', width: 30, align: 'right' },
+	{ header: 'Kg', width: 28, align: 'right' },
+	{ header: 'Freight', width: 34, align: 'right' },
+	// Price per bag.
+	{ header: 'Price', width: 31, align: 'right' },
+	// Value of the goods, before freight is taken off.
+	{ header: 'Amount', width: 37, align: 'right' },
+	// Goods less freight, and the column the grand total sits under. The width is set by
+	// the grand total figure rather than the header, which is far shorter.
+	{ header: 'Total', width: 42, align: 'right' },
 	{ header: 'Status', width: 42, align: 'left' }
 ] as const;
 
-/** Index of the Qty column, which the Grand Total sits under. */
-const QTY_INDEX = 7;
+/** Index of the Particulars column, the only one whose text is shaped into an image. */
+const PARTICULARS_INDEX = 2;
+/** Index of the Total Amount column, which the grand total sits under. */
+const TOTAL_AMOUNT_INDEX = 12;
 
 /**
  * Pre-renders every body cell holding Tamil (or other complex-script) text, keyed
@@ -91,7 +98,6 @@ function bodyRow(t: Transaction, party: Party | undefined): string[] {
 		paddedDate(t.transactionDate),
 		formatWayNumber(t.wayNumber, t.purchaseType),
 		[party?.partyName, party?.place].filter(Boolean).join(' '),
-		party?.phoneNumber ?? '',
 		t.itemName,
 		// Blank on manual entries where Load/Empty were not recorded.
 		t.load == null ? '' : count(t.load),
@@ -100,8 +106,10 @@ function bodyRow(t: Transaction, party: Party | undefined): string[] {
 		count(t.bagCount),
 		count(t.kg),
 		money(t.freightCharge),
-		// Price is left blank on this listing, as it is on the printed voucher report.
-		'',
+		// Price per bag; blank rather than a bare 0 when no rate was recorded.
+		t.price ? money(t.price) : '',
+		money(t.amount),
+		money(calculateTotalAmount(t.amount, t.freightCharge)),
 		t.status === 'inactive' ? 'Cancelled' : ''
 	];
 }
@@ -130,23 +138,23 @@ export async function buildVoucherListing(
 	const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
 	const pageWidth = doc.internal.pageSize.getWidth();
 	const range = rangeLabel(ordered, filters);
-	const grandTotal = ordered.reduce((sum, t) => sum + t.total, 0);
 	const body = ordered.map((t) => bodyRow(t, partyById.get(t.partyId)));
 	const shaped = await shapeCells(body);
 	const shapedCell = (section: string, row: number, col: number) =>
 		section === 'body' ? shaped.get(`${row}:${col}`) : undefined;
+
+	const grandTotal = ordered.reduce(
+		(sum, t) => sum + calculateTotalAmount(t.amount, t.freightCharge),
+		0
+	);
 
 	autoTable(doc, {
 		head: [COLUMNS.map((c) => c.header)],
 		body,
 		foot: [
 			[
-				{ content: 'Grand Total', colSpan: QTY_INDEX, styles: { halign: 'right' } },
+				{ content: 'Grand Total', colSpan: TOTAL_AMOUNT_INDEX, styles: { halign: 'right' } },
 				{ content: money(grandTotal), styles: { halign: 'right' } },
-				'',
-				'',
-				'',
-				'',
 				''
 			]
 		],
@@ -155,11 +163,28 @@ export async function buildVoucherListing(
 		rowPageBreak: 'avoid',
 		startY: PAGE_MARGIN + HEADER_HEIGHT,
 		margin: { top: PAGE_MARGIN + HEADER_HEIGHT, right: PAGE_MARGIN, bottom: PAGE_MARGIN, left: PAGE_MARGIN },
-		styles: { font: 'helvetica', fontSize: FONT_SIZE, cellPadding: CELL_PADDING, lineColor: 0, lineWidth: 0.5, textColor: 0 },
-		headStyles: { fillColor: false, fontStyle: 'bold', textColor: 0 },
-		footStyles: { fillColor: false, fontStyle: 'bold', textColor: 0 },
+		styles: {
+			font: 'helvetica',
+			fontSize: FONT_SIZE,
+			cellPadding: CELL_PADDING,
+			lineColor: 0,
+			lineWidth: 0.5,
+			textColor: 0,
+			// Centre short cells against a row made tall by a wrapped party name.
+			valign: 'middle'
+		},
+		headStyles: { fillColor: false, fontStyle: 'bold', textColor: 0, valign: 'middle' },
+		footStyles: { fillColor: false, fontStyle: 'bold', textColor: 0, valign: 'middle' },
 		columnStyles: Object.fromEntries(
-			COLUMNS.map((c, i) => [i, { cellWidth: c.width, halign: c.align }])
+			COLUMNS.map((c, i) => [
+				i,
+				{
+					cellWidth: c.width,
+					halign: c.align,
+					// A shaped name is drawn as an image anchored to the cell's top padding.
+					...(i === PARTICULARS_INDEX ? { valign: 'top' as const } : {})
+				}
+			])
 		),
 		// Shaped cells: blank text lines reserve the height, then the rendered image is drawn in.
 		didParseCell(data) {

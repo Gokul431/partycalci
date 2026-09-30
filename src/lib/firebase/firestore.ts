@@ -30,6 +30,7 @@ import { app } from './config';
 import type {
 	Party,
 	PartyInput,
+	PartyType,
 	Status,
 	Transaction,
 	TransactionData,
@@ -62,6 +63,8 @@ function toParty(snap: QueryDocumentSnapshot<DocumentData>): Party {
 		partyName: str(d.partyName),
 		place: str(d.place),
 		phoneNumber: str(d.phoneNumber),
+		// Parties created before party types existed are treated as wholesale.
+		partyType: d.partyType === 'farmer' ? 'farmer' : 'wholesale',
 		status: d.status === 'inactive' ? 'inactive' : 'active',
 		createdAt: toDate(d.createdAt),
 		updatedAt: toDate(d.updatedAt)
@@ -153,23 +156,26 @@ function toTransaction(snap: QueryDocumentSnapshot<DocumentData>): Transaction {
 }
 
 /** Validates and recalculates Total/Kg from raw inputs before every write. */
-function toWritable(values: TransactionFormValues) {
-	const r = validateTransaction(values);
+function toWritable(values: TransactionFormValues, partyType: PartyType) {
+	const r = validateTransaction(values, partyType);
 	if (!r.ok) throw new AppError(Object.values(r.errors)[0] ?? 'Invalid entry details.');
 	const data: TransactionData = r.data;
 	return { ...data, transactionDate: Timestamp.fromDate(data.transactionDate) };
 }
 
-async function assertPartySelectable(partyId: string, allowInactive: boolean) {
+/** Resolves the party a write is for, so the amount uses its real type rather than the form's. */
+async function requireSelectableParty(partyId: string, allowInactive: boolean): Promise<Party> {
+	if (!partyId) throw new AppError('Select a party from the party list.');
 	const party = await getParty(partyId);
 	if (!party) throw new AppError('The selected party no longer exists. Please choose another party.');
 	if (party.status !== 'active' && !allowInactive)
 		throw new AppError('The selected party is inactive. Please choose an active party.');
+	return party;
 }
 
 export async function createTransaction(values: TransactionFormValues): Promise<string> {
-	const data = toWritable(values);
-	await assertPartySelectable(data.partyId, false);
+	const party = await requireSelectableParty(values.partyId, false);
+	const data = toWritable(values, party.partyType);
 	const ref = await addDoc(txCol, { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
 	return ref.id;
 }
@@ -179,9 +185,9 @@ export async function updateTransaction(
 	values: TransactionFormValues,
 	previousPartyId: string
 ): Promise<void> {
-	const data = toWritable(values);
 	// Keeping an existing (now inactive) party is allowed; switching to one is not.
-	await assertPartySelectable(data.partyId, data.partyId === previousPartyId);
+	const party = await requireSelectableParty(values.partyId, values.partyId === previousPartyId);
+	const data = toWritable(values, party.partyType);
 	await updateDoc(doc(txCol, id), { ...data, updatedAt: serverTimestamp() });
 }
 

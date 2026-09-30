@@ -1,5 +1,12 @@
 export type Status = 'active' | 'inactive';
 export type PurchaseType = 'purchase' | 'return';
+/** Wholesale parties are billed for full bags only; farmers are also paid for the loose kg. */
+export type PartyType = 'wholesale' | 'farmer';
+
+export const PARTY_TYPE_OPTIONS: { value: PartyType; label: string }[] = [
+	{ value: 'wholesale', label: 'Wholesale' },
+	{ value: 'farmer', label: 'Farmer' }
+];
 
 export const STATUS_OPTIONS: { value: Status; label: string }[] = [
 	{ value: 'active', label: 'Active' },
@@ -19,6 +26,7 @@ export interface Party {
 	partyName: string;
 	place: string;
 	phoneNumber: string;
+	partyType: PartyType;
 	status: Status;
 	createdAt: Date | null;
 	updatedAt: Date | null;
@@ -28,6 +36,7 @@ export interface PartyInput {
 	partyName: string;
 	place: string;
 	phoneNumber: string;
+	partyType: PartyType;
 	status: Status;
 }
 
@@ -65,13 +74,14 @@ export interface TransactionFormValues {
 	load: number | null;
 	empty: number | null;
 	autoCalculate: boolean;
-	/** Typed Total and Bags — used only when autoCalculate is off. */
+	/** Typed weights — used only when autoCalculate is off, where nothing is derived. */
 	total: number | null;
 	bagCount: number | null;
+	kg: number | null;
 	freightCharge: number | null;
 	narration: string;
+	/** Price per bag. The loose-kg rate and both amounts are derived from it. */
 	price: number | null;
-	amount: number | null;
 	status: Status;
 }
 

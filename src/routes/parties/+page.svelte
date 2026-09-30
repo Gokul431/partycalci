@@ -156,7 +156,16 @@
 		{#each rows as p (p.id)}
 			{@const sum = summaries.get(p.id)}
 			<tr class="hover:bg-slate-50">
-				<td class="td"><a href="/parties/{p.id}" class="font-medium text-emerald-700 hover:underline">{p.partyName}</a></td>
+				<td class="td">
+					<span class="inline-flex items-center gap-2">
+						<a href="/parties/{p.id}" class="font-medium text-emerald-700 hover:underline">{p.partyName}</a>
+						<span class="rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase {p.partyType === 'farmer'
+							? 'bg-emerald-50 text-emerald-700'
+							: 'bg-slate-100 text-slate-600'}">
+							{p.partyType === 'farmer' ? 'Farmer' : 'Wholesale'}
+						</span>
+					</span>
+				</td>
 				<td class="td">{p.place || '—'}</td>
 				<td class="td tabular-nums">{p.phoneNumber || '—'}</td>
 				{#if sum?.state === 'ready'}

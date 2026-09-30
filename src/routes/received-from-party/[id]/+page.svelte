@@ -11,7 +11,7 @@
 	import { friendlyError } from '$lib/utils/errors';
 	import { formatDate, formatDateTime } from '$lib/utils/dates';
 	import { formatCurrency, formatKg, formatNumber, formatWayNumber, purchaseTypeLabel } from '$lib/utils/format';
-	import { KG_PER_BAG } from '$lib/utils/calculations';
+	import { KG_PER_BAG, calculateTotalAmount } from '$lib/utils/calculations';
 	import type { Transaction } from '$lib/types';
 
 	const id = $derived(page.params.id ?? '');
@@ -90,7 +90,7 @@
 	</PageHeader>
 
 	<div class="card mb-4 grid grid-cols-2 divide-slate-200 lg:grid-cols-4 lg:divide-x">
-		{#each [{ label: 'Total Weight', value: formatKg(tx.total) }, { label: 'Kg', value: formatKg(tx.kg) }, { label: 'Number of Bags', value: formatNumber(tx.bagCount) }, { label: 'Amount', value: formatCurrency(tx.amount) }] as s (s.label)}
+		{#each [{ label: 'Total Weight', value: formatKg(tx.total) }, { label: 'Number of Bags', value: formatNumber(tx.bagCount) }, { label: 'Loose Kg', value: formatKg(tx.kg) }, { label: 'Total Amount', value: formatCurrency(calculateTotalAmount(tx.amount, tx.freightCharge)) }] as s (s.label)}
 			<div class="px-5 py-4">
 				<div class="text-xs font-semibold tracking-wide text-slate-500 uppercase">{s.label}</div>
 				<div class="mt-1 text-xl font-bold text-slate-900">{s.value}</div>
@@ -145,9 +145,10 @@
 		<section class="card xl:col-span-2">
 			<h2 class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">Other Details</h2>
 			<dl class="grid grid-cols-2 gap-x-6 gap-y-5 p-5 md:grid-cols-4">
-				{@render item('Freight Charge', formatCurrency(tx.freightCharge))}
-				{@render item('Price', formatCurrency(tx.price))}
-				{@render item('Amount', formatCurrency(tx.amount), true)}
+				{@render item('Price per Bag', formatCurrency(tx.price))}
+				{@render item('Item Amount', formatCurrency(tx.amount))}
+				{@render item('Freight Charge', `− ${formatCurrency(tx.freightCharge)}`)}
+				{@render item('Total Amount', formatCurrency(calculateTotalAmount(tx.amount, tx.freightCharge)), true)}
 				<div>
 					<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Status</dt>
 					<dd class="mt-1"><StatusBadge status={tx.status} /></dd>

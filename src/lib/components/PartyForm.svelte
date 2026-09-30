@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { PartyInput } from '$lib/types';
-	import { STATUS_OPTIONS } from '$lib/types';
+	import { PARTY_TYPE_OPTIONS, STATUS_OPTIONS } from '$lib/types';
 	import { validateParty, type FieldErrors, type PartyField } from '$lib/utils/validation';
 	import { friendlyError } from '$lib/utils/errors';
 	import { toast } from '$lib/stores/toast.svelte';
@@ -18,7 +18,14 @@
 	} = $props();
 
 	// svelte-ignore state_referenced_locally
-	let values = $state<PartyInput>({ partyName: '', place: '', phoneNumber: '', status: 'active', ...initial });
+	let values = $state<PartyInput>({
+		partyName: '',
+		place: '',
+		phoneNumber: '',
+		partyType: 'wholesale',
+		status: 'active',
+		...initial
+	});
 	let submitted = $state(false);
 	let busy = $state(false);
 
@@ -61,6 +68,16 @@
 			<label class="label" for="phoneNumber">Phone Number</label>
 			<input id="phoneNumber" type="tel" inputmode="tel" class="input {errors.phoneNumber ? 'input-error' : ''}" bind:value={values.phoneNumber} maxlength="20" placeholder="e.g. 9626540553" aria-invalid={!!errors.phoneNumber} />
 			{#if errors.phoneNumber}<p class="field-error">{errors.phoneNumber}</p>{/if}
+		</div>
+		<div>
+			<label class="label" for="partyType">Party Type <span class="text-red-600">*</span></label>
+			<select id="partyType" class="select {errors.partyType ? 'input-error' : ''}" bind:value={values.partyType}>
+				{#each PARTY_TYPE_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+			</select>
+			{#if errors.partyType}<p class="field-error">{errors.partyType}</p>{/if}
+			<p class="mt-1 text-xs text-slate-500">
+				Wholesale is billed for full bags only. A farmer is also paid for the loose Kg.
+			</p>
 		</div>
 		<div>
 			<label class="label" for="status">Status <span class="text-red-600">*</span></label>

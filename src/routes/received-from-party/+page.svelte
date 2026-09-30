@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
@@ -20,12 +20,12 @@
 		setTransactionStatus
 	} from '$lib/firebase/firestore';
 	import { downloadVoucherListing } from '$lib/utils/pdf';
-	import type { DateRange } from '$lib/utils/ranges';
+	import { defaultDateRange, type DateRange } from '$lib/utils/ranges';
 	import { parties } from '$lib/stores/parties.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { friendlyError } from '$lib/utils/errors';
 	import { formatDate } from '$lib/utils/dates';
-	import { formatCurrency, formatNumber, formatWayNumber, purchaseTypeLabel } from '$lib/utils/format';
+	import { formatCurrency, formatNumber, formatWayNumber } from '$lib/utils/format';
 	import {
 		FILTER_DEBOUNCE_MS,
 		filtersFromUrl,
@@ -52,6 +52,13 @@
 		if (key === synced) return;
 		synced = key;
 		draft = { ...filters };
+	});
+
+	// Open on the last month, unless the URL already names a period (a shared or bookmarked link).
+	onMount(() => {
+		if (filters.dateFrom || filters.dateTo) return;
+		const range = defaultDateRange();
+		applyFilters({ ...filters, dateFrom: range.from, dateTo: range.to });
 	});
 
 	// Live search: apply the draft once typing pauses.
@@ -211,10 +218,10 @@
 	onreset={() => applyFilters(EMPTY_FILTERS)}
 />
 
-<DataTable {loading} {error} onretry={reload} isEmpty={rows.length === 0} skeletonColumns={7}>
+<DataTable {loading} {error} onretry={reload} isEmpty={rows.length === 0} skeletonColumns={11}>
 	{#snippet head()}
 		<tr>
-			<th class="th">Date</th><th class="th">Type</th><th class="th">Way No</th><th class="th">Party</th>
+			<th class="th">Date</th><th class="th">Way No</th><th class="th">Party</th>
 			<th class="th">Item</th><th class="th num">Load</th><th class="th num">Empty</th><th class="th num">Total</th>
 			<th class="th num">Bags</th><th class="th num">Kg</th><th class="th num">Freight</th>
 			<th class="th sticky right-0 w-16 bg-slate-50 text-right">Actions</th>
@@ -231,7 +238,6 @@
 				<td class="td">
 					<a class="font-medium text-emerald-700 hover:underline" href="/received-from-party/{t.id}">{formatDate(t.transactionDate)}</a>
 				</td>
-				<td class="td">{purchaseTypeLabel(t.purchaseType)}</td>
 				<td class="td">
 					<a class="font-medium text-slate-900 hover:underline" href="/received-from-party/{t.id}">{formatWayNumber(t.wayNumber, t.purchaseType)}</a>
 					{#if t.status === 'inactive'}

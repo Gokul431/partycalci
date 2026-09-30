@@ -50,6 +50,11 @@ export const RANGE_PRESETS: RangePreset[] = [
 	{ label: 'All dates', of: () => ({ from: '', to: '' }) }
 ];
 
+/** The period the entry list opens on when the URL carries no dates of its own. */
+export function defaultDateRange(today = new Date()): DateRange {
+	return { from: toISODate(addMonths(today, -1)), to: toISODate(today) };
+}
+
 /** The preset a range corresponds to, so reopening the dialog keeps the chip highlighted. */
 export function matchPreset(range: DateRange, today = new Date()): string | null {
 	return RANGE_PRESETS.find((p) => {

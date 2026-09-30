@@ -20,12 +20,14 @@ service cloud.firestore {
 
     // ------------------------------------------------------------- Parties
     function validParty(d) {
+      // Parties saved before party types existed have no partyType field: wholesale.
       let keys = ['partyName', 'place', 'phoneNumber', 'status', 'createdAt', 'updatedAt'];
-      return d.keys().hasAll(keys) && d.keys().hasOnly(keys)
+      return d.keys().hasAll(keys) && d.keys().hasOnly(keys.concat(['partyType']))
         && requiredText(d.partyName, 120)
         && validText(d.place, 120)
         && validText(d.phoneNumber, 20)
         && (d.phoneNumber == '' || d.phoneNumber.matches('^[0-9+\\- ]{7,20}$'))
+        && (!('partyType' in d) || d.partyType in ['wholesale', 'farmer'])
         && validStatus(d.status)
         && d.updatedAt == request.time;
     }
@@ -48,8 +50,8 @@ service cloud.firestore {
     //   total    = load - empty
     //   bagCount = floor(total / 62)           (KG_PER_BAG = 62)
     //   kg       = total - (bagCount × 62)     the loose remainder
-    // With autoCalculate == false the user types total and bagCount (load/empty
-    // optional), and kg must still equal total - bagCount × 62 and be >= 0.
+    // With autoCalculate == false nothing is derived: the user types total, bagCount
+    // and kg directly (load/empty optional), so no relation between them is enforced.
     // Entries saved before the toggle existed have no autoCalculate field: auto.
     function isAuto(d) { return !('autoCalculate' in d) || d.autoCalculate == true; }
     function optionalWeight(n) { return n == null || nonNegative(n); }
@@ -59,7 +61,8 @@ service cloud.firestore {
         && nonNegative(d.empty)
         && d.empty <= d.load
         && d.total == d.load - d.empty
-        && d.bagCount == math.floor(d.total / 62);
+        && d.bagCount == math.floor(d.total / 62)
+        && d.kg == d.total - d.bagCount * 62;
     }
 
     function manualWeights(d) {
@@ -68,7 +71,7 @@ service cloud.firestore {
         && optionalWeight(d.empty)
         && (d.load == null || d.empty == null || d.empty <= d.load)
         && nonNegative(d.total)
-        && d.kg >= 0;
+        && nonNegative(d.kg);
     }
 
     function partyDoc(id) { return /databases/$(database)/documents/parties/$(id); }
@@ -84,7 +87,6 @@ service cloud.firestore {
         && d.partyId is string && exists(partyDoc(d.partyId))
         && requiredText(d.itemName, 120)
         && d.bagCount is int && d.bagCount >= 0
-        && d.kg == d.total - d.bagCount * 62
         && (isAuto(d) ? autoWeights(d) : manualWeights(d))
         && nonNegative(d.freightCharge)
         && nonNegative(d.price)

@@ -35,6 +35,7 @@ function fixture() {
 				partyName: name,
 				place,
 				phoneNumber: phone,
+				partyType: 'wholesale',
 				status: 'active',
 				createdAt: null,
 				updatedAt: null
@@ -109,10 +110,10 @@ describe('voucher listing PDF', () => {
 		const doc = await buildVoucherListing(wide, partyById, FILTERS);
 		// @ts-expect-error autotable records the finished table on the document.
 		const table = doc.lastAutoTable;
+		// A cell that wrapped would make its row taller than the rest.
 		const heights: number[] = [...table.head, ...table.body, ...table.foot].map(
 			(r: { height: number }) => r.height
 		);
-		// A cell that wrapped would make its row taller than the rest.
 		expect(Math.max(...heights)).toBe(Math.min(...heights));
 	});
 });

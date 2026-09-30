@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { KG_PER_BAG, calculateBags, calculateKg, calculateTotal } from './calculations';
-import { BAGS_EXCEED_TOTAL, EMPTY_GT_LOAD, computeWeights, validateParty, validateTransaction } from './validation';
-import type { TransactionFormValues } from '$lib/types';
+import {
+	KG_PER_BAG,
+	calculateBags,
+	calculateItemAmount,
+	calculateKg,
+	calculateTotal,
+	calculateTotalAmount,
+	ratePerKg
+} from './calculations';
+import { EMPTY_GT_LOAD, computeWeights, validateParty, validateTransaction } from './validation';
+import type { PartyInput, TransactionFormValues } from '$lib/types';
 
 // Voucher 74808 from the mill's own listing: Total 6,460 prints as 104 bags and 12 kg.
 const base: TransactionFormValues = {
@@ -13,12 +21,20 @@ const base: TransactionFormValues = {
 	load: 10820,
 	empty: 4360,
 	autoCalculate: true,
+	kg: null,
 	total: null,
 	bagCount: null,
 	freightCharge: null,
 	narration: '',
 	price: null,
-	amount: null,
+	status: 'active'
+};
+
+const party: PartyInput = {
+	partyName: 'Karthick',
+	place: 'KLU',
+	phoneNumber: '9626540553',
+	partyType: 'wholesale',
 	status: 'active'
 };
 
@@ -82,7 +98,7 @@ describe('computeWeights', () => {
 
 describe('validateTransaction', () => {
 	it('stores the derived weights', () => {
-		const r = validateTransaction(base);
+		const r = validateTransaction(base, 'wholesale');
 		expect(r.ok).toBe(true);
 		if (r.ok) {
 			expect(r.data.total).toBe(6460);
@@ -93,47 +109,103 @@ describe('validateTransaction', () => {
 		}
 	});
 	it('requires the mandatory fields', () => {
-		const r = validateTransaction({ ...base, wayNumber: ' ', partyId: '', itemName: '', load: null, transactionDate: '' });
+		const r = validateTransaction(
+			{ ...base, wayNumber: ' ', partyId: '', itemName: '', load: null, transactionDate: '' },
+			'wholesale'
+		);
 		expect(r.ok).toBe(false);
 		if (!r.ok) expect(Object.keys(r.errors).sort()).toEqual(['itemName', 'load', 'partyId', 'transactionDate', 'wayNumber']);
 	});
 	it('rejects negative money fields', () => {
-		expect(validateTransaction({ ...base, amount: -1 }).ok).toBe(false);
+		expect(validateTransaction({ ...base, price: -1 }, 'wholesale').ok).toBe(false);
+	});
+});
+
+describe('billing', () => {
+	// The client's worked example: 952 kg = 15 bags + 22 loose, at ₹1,500 a bag.
+	const PRICE = 1500;
+	const BAGS = 15;
+	const LOOSE = 22;
+	const FREIGHT = 500;
+
+	it('breaks the bag price down to the kilo, rounded down', () => {
+		// 1500 / 62 = 24.19
+		expect(ratePerKg(PRICE)).toBe(24);
+	});
+
+	it('bills a farmer for the bags and the loose kg', () => {
+		expect(calculateItemAmount('farmer', BAGS, LOOSE, PRICE)).toBe(23028);
+	});
+
+	it('bills wholesale for the full bags only', () => {
+		expect(calculateItemAmount('wholesale', BAGS, LOOSE, PRICE)).toBe(22500);
+	});
+
+	it('subtracts the freight from the item amount', () => {
+		expect(calculateTotalAmount(23028, FREIGHT)).toBe(22528);
+		expect(calculateTotalAmount(22500, FREIGHT)).toBe(22000);
+	});
+
+	it('leaves the total equal to the item amount when there is no freight', () => {
+		expect(calculateTotalAmount(23028, 0)).toBe(23028);
+	});
+
+	it('is the loose-kg line that separates the two party types', () => {
+		const farmer = calculateItemAmount('farmer', BAGS, LOOSE, PRICE);
+		const wholesale = calculateItemAmount('wholesale', BAGS, LOOSE, PRICE);
+		expect(farmer - wholesale).toBe(LOOSE * ratePerKg(PRICE));
+		expect(farmer - wholesale).toBe(528);
+	});
+
+	it('stores the amount the party type calls for', () => {
+		const entry = { ...base, load: 3452, empty: 2500, price: PRICE, freightCharge: FREIGHT };
+		const asFarmer = validateTransaction(entry, 'farmer');
+		const asWholesale = validateTransaction(entry, 'wholesale');
+		expect(asFarmer.ok && asFarmer.data).toMatchObject({ bagCount: 15, kg: 22, amount: 23028 });
+		expect(asWholesale.ok && asWholesale.data).toMatchObject({ bagCount: 15, kg: 22, amount: 22500 });
 	});
 });
 
 describe('validateParty', () => {
 	it('requires a name and trims input', () => {
-		expect(validateParty({ partyName: ' ', place: '', phoneNumber: '', status: 'active' }).ok).toBe(false);
-		const r = validateParty({ partyName: ' Karthick ', place: ' KLU ', phoneNumber: '9626540553', status: 'active' });
-		expect(r).toEqual({ ok: true, data: { partyName: 'Karthick', place: 'KLU', phoneNumber: '9626540553', status: 'active' } });
+		expect(validateParty({ ...party, partyName: ' ' }).ok).toBe(false);
+		const r = validateParty({ ...party, partyName: ' Karthick ', place: ' KLU ' });
+		expect(r).toEqual({ ok: true, data: { ...party, partyName: 'Karthick', place: 'KLU' } });
 	});
 	it('validates phone numbers', () => {
-		expect(validateParty({ partyName: 'A', place: '', phoneNumber: '12ab', status: 'active' }).ok).toBe(false);
-		expect(validateParty({ partyName: 'A', place: '', phoneNumber: '+91 96265 40553', status: 'active' }).ok).toBe(true);
+		expect(validateParty({ ...party, phoneNumber: '12ab' }).ok).toBe(false);
+		expect(validateParty({ ...party, phoneNumber: '+91 96265 40553' }).ok).toBe(true);
+	});
+	it('requires a party type', () => {
+		expect(validateParty({ ...party, partyType: 'trader' as never }).ok).toBe(false);
 	});
 });
 
 describe('manual weights (auto-calculate off)', () => {
-	const manual = { load: null, empty: null, autoCalculate: false, total: 6000, bagCount: 96 };
+	const manual = { load: null, empty: null, autoCalculate: false, total: 6000, bagCount: 96, kg: 48 };
 
-	it('takes typed Total and Bags and derives Loose Kg', () => {
+	it('takes every weight exactly as typed', () => {
 		expect(computeWeights(manual)).toMatchObject({ total: 6000, bagCount: 96, kg: 48, errors: {} });
 	});
 	it('makes Load and Empty optional', () => {
-		const r = validateTransaction({ ...base, ...manual });
+		const r = validateTransaction({ ...base, ...manual }, 'wholesale');
 		expect(r.ok).toBe(true);
 		if (r.ok) expect(r.data).toMatchObject({ load: null, empty: null, autoCalculate: false, kg: 48 });
 	});
 	it('does not require Total to match Load − Empty', () => {
-		const r = validateTransaction({ ...base, ...manual, load: 9000, empty: 1000 });
+		const r = validateTransaction({ ...base, ...manual, load: 9000, empty: 1000 }, 'wholesale');
 		expect(r.ok && r.data.total).toBe(6000);
 	});
-	it('rejects bags that exceed the total', () => {
-		expect(computeWeights({ ...manual, bagCount: 100 }).errors.bagCount).toBe(BAGS_EXCEED_TOTAL);
+	it('accepts weights that do not agree with each other', () => {
+		// 60 bags could never hold 500 kg at 62 kg a bag, but manual entry does not judge.
+		const r = computeWeights({ ...manual, total: 500, bagCount: 60, kg: 0 });
+		expect(r).toMatchObject({ total: 500, bagCount: 60, kg: 0, errors: {} });
 	});
-	it('requires Total and Bags', () => {
-		const { errors } = computeWeights({ ...manual, total: null, bagCount: null });
-		expect(Object.keys(errors).sort()).toEqual(['bagCount', 'total']);
+	it('requires Total, Bags and Loose Kg', () => {
+		const { errors } = computeWeights({ ...manual, total: null, bagCount: null, kg: null });
+		expect(Object.keys(errors).sort()).toEqual(['bagCount', 'kg', 'total']);
+	});
+	it('still rejects a negative Loose Kg', () => {
+		expect(computeWeights({ ...manual, kg: -5 }).errors.kg).toBeDefined();
 	});
 });

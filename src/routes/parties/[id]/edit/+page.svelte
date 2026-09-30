@@ -29,7 +29,7 @@
 {:else}
 	{#key party.id}
 		<PartyForm
-			initial={{ partyName: party.partyName, place: party.place, phoneNumber: party.phoneNumber, status: party.status }}
+			initial={{ partyName: party.partyName, place: party.place, phoneNumber: party.phoneNumber, partyType: party.partyType, status: party.status }}
 			submitLabel="Save Changes"
 			cancelHref="/parties/{party.id}"
 			onsubmit={save}

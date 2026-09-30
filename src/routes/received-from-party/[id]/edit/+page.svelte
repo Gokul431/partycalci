@@ -50,10 +50,10 @@
 			autoCalculate: t.autoCalculate,
 			total: t.total,
 			bagCount: t.bagCount,
+			kg: t.kg,
 			freightCharge: t.freightCharge,
 			narration: t.narration,
 			price: t.price,
-			amount: t.amount,
 			status: t.status
 		};
 	}

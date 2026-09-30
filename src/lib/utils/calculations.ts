@@ -9,10 +9,18 @@
  *
  * The total weight is expressed as whole bags plus the loose remainder, so a Total of
  * 95 reads as "1 bag 33 kg". Bags and Kg are both derived; neither is typed in.
- * Price, Amount and Freight Charge are manual inputs (no formula confirmed).
  *
- * firestore.rules re-checks these same formulas server-side; keep them in sync.
+ * Money follows from the price per bag, and depends on the party:
+ *   Rate per kg  = floor(Price per bag / KG_PER_BAG)
+ *   Item Amount  = Bags × Price per bag            (wholesale)
+ *                = that + Kg × Rate per kg         (farmer)
+ *   Total Amount = Item Amount - Freight Charge
+ * Price per bag and Freight Charge are the only money values typed in.
+ *
+ * firestore.rules re-checks the weight formulas server-side; keep them in sync.
  */
+import type { PartyType } from '$lib/types';
+
 export const KG_PER_BAG = 62;
 
 export function calculateTotal(load: number, empty: number): number {
@@ -32,4 +40,25 @@ export function looseKg(total: number, bagCount: number): number {
 /** Weight left over after the whole bags — always less than KG_PER_BAG. */
 export function calculateKg(total: number): number {
 	return looseKg(total, calculateBags(total));
+}
+
+/** The bag price broken down to the kilo, rounded down to the whole rupee. */
+export function ratePerKg(pricePerBag: number): number {
+	return Math.floor(pricePerBag / KG_PER_BAG);
+}
+
+/** Value of the goods. Wholesale pays for full bags only; a farmer is paid for the loose kg too. */
+export function calculateItemAmount(
+	partyType: PartyType,
+	bagCount: number,
+	kg: number,
+	pricePerBag: number
+): number {
+	const bags = bagCount * pricePerBag;
+	return partyType === 'farmer' ? bags + kg * ratePerKg(pricePerBag) : bags;
+}
+
+/** What the party is actually owed: the goods less the freight the mill covered. */
+export function calculateTotalAmount(itemAmount: number, freightCharge: number): number {
+	return itemAmount - freightCharge;
 }

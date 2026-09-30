@@ -1,6 +1,13 @@
-import { KG_PER_BAG, calculateBags, calculateKg, calculateTotal, looseKg } from './calculations';
+import {
+	KG_PER_BAG,
+	calculateBags,
+	calculateItemAmount,
+	calculateKg,
+	calculateTotal,
+	looseKg
+} from './calculations';
 import { parseISODate } from './dates';
-import type { PartyInput, TransactionData, TransactionFormValues } from '$lib/types';
+import type { PartyInput, PartyType, TransactionData, TransactionFormValues } from '$lib/types';
 
 export type FieldErrors<K extends string = string> = Partial<Record<K, string>>;
 
@@ -29,6 +36,7 @@ export function validateParty(input: PartyInput): Result<PartyInput, PartyField>
 		partyName: input.partyName.trim().replace(/\s+/g, ' '),
 		place: input.place.trim(),
 		phoneNumber: input.phoneNumber.trim().replace(/\s+/g, ' '),
+		partyType: input.partyType,
 		status: input.status
 	};
 	const errors: FieldErrors<PartyField> = {};
@@ -37,6 +45,8 @@ export function validateParty(input: PartyInput): Result<PartyInput, PartyField>
 	if (data.place.length > 120) errors.place = 'Place is too long (max 120).';
 	const phoneError = validatePhone(data.phoneNumber);
 	if (phoneError) errors.phoneNumber = phoneError;
+	if (data.partyType !== 'wholesale' && data.partyType !== 'farmer')
+		errors.partyType = 'Party type is required.';
 	if (!isStatus(data.status)) errors.status = 'Status is required.';
 	return Object.keys(errors).length ? { ok: false, errors } : { ok: true, data };
 }
@@ -47,16 +57,14 @@ export const EMPTY_GT_LOAD = 'Empty weight cannot be greater than Load weight.';
 
 /** Validates the weight inputs and derives Total, Bags and Kg when possible. */
 type WeightInput = Pick<TransactionFormValues, 'load' | 'empty'> &
-	Partial<Pick<TransactionFormValues, 'autoCalculate' | 'total' | 'bagCount'>>;
-type WeightField = 'load' | 'empty' | 'total' | 'bagCount';
-
-export const BAGS_EXCEED_TOTAL = `Bags × ${KG_PER_BAG} is more than the Total, so Loose Kg would be negative.`;
+	Partial<Pick<TransactionFormValues, 'autoCalculate' | 'total' | 'bagCount' | 'kg'>>;
+type WeightField = 'load' | 'empty' | 'total' | 'bagCount' | 'kg';
 
 /**
  * Validates the weight inputs and returns Total, Bags and Loose Kg when possible.
  * Auto (default): everything derives from Load − Empty.
- * Manual (autoCalculate === false): Total and Bags are typed, Load/Empty are optional,
- * and Loose Kg is still derived as Total − Bags × KG_PER_BAG.
+ * Manual (autoCalculate === false): nothing is derived — Total, Bags and Loose Kg are
+ * all typed and only checked individually, so the three need not agree with each other.
  */
 export function computeWeights(v: WeightInput): {
 	total: number | null;
@@ -74,14 +82,15 @@ export function computeWeights(v: WeightInput): {
 
 		const total = v.total ?? null;
 		const bags = v.bagCount ?? null;
+		const kg = v.kg ?? null;
 		if (!isNum(total)) errors.total = 'Total is required.';
 		else if (total < 0) errors.total = 'Total must be 0 or more.';
 		if (!isNum(bags)) errors.bagCount = 'Number of bags is required.';
 		else if (bags < 0 || !Number.isInteger(bags)) errors.bagCount = 'Number of bags must be a whole number, 0 or more.';
+		if (!isNum(kg)) errors.kg = 'Loose Kg is required.';
+		else if (kg < 0) errors.kg = 'Loose Kg must be 0 or more.';
 
-		if (!isNum(total) || !isNum(bags)) return { total: null, bagCount: null, kg: null, errors };
-		const kg = looseKg(total, bags);
-		if (kg < 0 && !errors.bagCount) errors.bagCount = BAGS_EXCEED_TOTAL;
+		if (!isNum(total) || !isNum(bags) || !isNum(kg)) return { total: null, bagCount: null, kg: null, errors };
 		return { total, bagCount: bags, kg, errors };
 	}
 
@@ -99,7 +108,7 @@ export function computeWeights(v: WeightInput): {
 
 function optionalAmount(
 	value: number | null,
-	field: 'freightCharge' | 'price' | 'amount',
+	field: 'freightCharge' | 'price',
 	label: string,
 	errors: FieldErrors<TransactionField>
 ): number {
@@ -111,9 +120,14 @@ function optionalAmount(
 
 /**
  * Full validation + recalculation. Always used right before writing to Firestore,
- * so stored Total/Kg never come from browser form state.
+ * so stored weights and amounts never come from browser form state. The party type
+ * decides whether the loose kg is billed, so it is passed in rather than trusted
+ * from the form — the write path reads it from the party record itself.
  */
-export function validateTransaction(v: TransactionFormValues): Result<TransactionData, TransactionField> {
+export function validateTransaction(
+	v: TransactionFormValues,
+	partyType: PartyType
+): Result<TransactionData, TransactionField> {
 	const errors: FieldErrors<TransactionField> = {};
 
 	const date = parseISODate(v.transactionDate);
@@ -137,8 +151,7 @@ export function validateTransaction(v: TransactionFormValues): Result<Transactio
 	Object.assign(errors, w.errors);
 
 	const freightCharge = optionalAmount(v.freightCharge, 'freightCharge', 'Freight charge', errors);
-	const price = optionalAmount(v.price, 'price', 'Price', errors);
-	const amount = optionalAmount(v.amount, 'amount', 'Amount', errors);
+	const price = optionalAmount(v.price, 'price', 'Price per bag', errors);
 
 	const narration = v.narration.trim();
 	if (narration.length > 1000) errors.narration = 'Narration is too long (max 1000).';
@@ -165,7 +178,7 @@ export function validateTransaction(v: TransactionFormValues): Result<Transactio
 			freightCharge,
 			narration,
 			price,
-			amount,
+			amount: calculateItemAmount(partyType, w.bagCount, w.kg, price),
 			status: v.status
 		}
 	};
