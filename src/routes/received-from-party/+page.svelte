@@ -19,7 +19,7 @@
 		resolveFilters,
 		setTransactionStatus
 	} from '$lib/firebase/firestore';
-	import { downloadVoucherListing } from '$lib/utils/pdf';
+	import { downloadSingleReceipt, downloadVoucherListing } from '$lib/utils/pdf';
 	import { defaultDateRange, type DateRange } from '$lib/utils/ranges';
 	import { parties } from '$lib/stores/parties.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
@@ -222,8 +222,7 @@
 	{#snippet head()}
 		<tr>
 			<th class="th">Date</th><th class="th">Way No</th><th class="th">Party</th>
-			<th class="th">Item</th><th class="th num">Load</th><th class="th num">Empty</th><th class="th num">Total</th>
-			<th class="th num">Bags</th><th class="th num">Kg</th><th class="th num">Freight</th>
+			<th class="th">Item</th><th class="th num">Total</th><th class="th num">Bags</th><th class="th num">Kg</th><th class="th num">Freight</th>
 			<th class="th sticky right-0 w-16 bg-slate-50 text-right">Actions</th>
 		</tr>
 	{/snippet}
@@ -249,8 +248,6 @@
 					{#if party?.phoneNumber}<div class="text-xs text-slate-500 tabular-nums">{party.phoneNumber}</div>{/if}
 				</td>
 				<td class="td">{t.itemName}</td>
-				<td class="td num">{formatNumber(t.load)}</td>
-				<td class="td num">{formatNumber(t.empty)}</td>
 				<td class="td num font-medium">{formatNumber(t.total)}</td>
 				<td class="td num">{formatNumber(t.bagCount)}</td>
 				<td class="td num font-medium">{formatNumber(t.kg)}</td>
@@ -262,6 +259,17 @@
 							items={[
 								{ label: 'View', icon: 'eye', href: `/received-from-party/${t.id}` },
 								{ label: 'Edit', icon: 'edit', href: `/received-from-party/${t.id}/edit` },
+								{
+									label: 'Download Report',
+									icon: 'download',
+									onclick: async () => {
+										try {
+											await downloadSingleReceipt(t, party);
+										} catch (e) {
+											toast.error(friendlyError(e, 'Could not download receipt PDF.'));
+										}
+									}
+								},
 								t.status === 'active'
 									? { label: 'Mark as Inactive', icon: 'ban', tone: 'danger', divider: true, onclick: () => askStatus(t) }
 									: { label: 'Mark as Active', icon: 'checkCircle', tone: 'success', divider: true, onclick: () => askStatus(t) }

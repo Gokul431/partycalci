@@ -140,6 +140,27 @@
 				<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Last Updated</dt>
 				<dd class="mt-1 text-sm text-slate-900">{formatDateTime(party.updatedAt)}</dd>
 			</div>
+			{#if party.accountName || party.accountNo || party.ifscCode || party.bankName}
+				<div class="border-t border-slate-100 pt-4 sm:col-span-2 lg:col-span-4">
+					<h3 class="text-xs font-semibold tracking-wide text-slate-500 uppercase">Bank Details</h3>
+				</div>
+				<div>
+					<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Account Name</dt>
+					<dd class="mt-1 text-sm text-slate-900">{party.accountName || '—'}</dd>
+				</div>
+				<div>
+					<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Account NO</dt>
+					<dd class="mt-1 text-sm text-slate-900 tabular-nums">{party.accountNo || '—'}</dd>
+				</div>
+				<div>
+					<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">IFSC code</dt>
+					<dd class="mt-1 text-sm font-mono uppercase text-slate-900">{party.ifscCode || '—'}</dd>
+				</div>
+				<div>
+					<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Bank Name</dt>
+					<dd class="mt-1 text-sm text-slate-900">{party.bankName || '—'}</dd>
+				</div>
+			{/if}
 		</dl>
 	</section>
 

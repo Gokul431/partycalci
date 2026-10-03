@@ -35,6 +35,10 @@ const party: PartyInput = {
 	place: 'KLU',
 	phoneNumber: '9626540553',
 	partyType: 'wholesale',
+	accountName: '',
+	accountNo: '',
+	ifscCode: '',
+	bankName: '',
 	status: 'active'
 };
 
@@ -178,6 +182,25 @@ describe('validateParty', () => {
 	});
 	it('requires a party type', () => {
 		expect(validateParty({ ...party, partyType: 'trader' as never }).ok).toBe(false);
+	});
+	it('accepts and trims bank details', () => {
+		const r = validateParty({
+			...party,
+			accountName: ' Prasanna Venkatesh ',
+			accountNo: ' 123456789012 ',
+			ifscCode: ' sbin0001234 ',
+			bankName: ' State Bank of India '
+		});
+		expect(r).toEqual({
+			ok: true,
+			data: {
+				...party,
+				accountName: 'Prasanna Venkatesh',
+				accountNo: '123456789012',
+				ifscCode: 'SBIN0001234',
+				bankName: 'State Bank of India'
+			}
+		});
 	});
 });
 

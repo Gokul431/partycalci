@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildVoucherListing } from './pdf';
+import { buildSingleReceipt, buildVoucherListing } from './pdf';
 import type { Party, Transaction, TransactionFilters } from '$lib/types';
 
 /**
@@ -117,3 +117,90 @@ describe('voucher listing PDF', () => {
 		expect(Math.max(...heights)).toBe(Math.min(...heights));
 	});
 });
+
+describe('single receipt PDF (matching image.png)', () => {
+	it('generates a single page A4 portrait receipt with dynamic row data', async () => {
+		const tx: Transaction = {
+			id: 'test-1',
+			transactionDate: new Date('2026-04-24T00:00:00'),
+			purchaseType: 'purchase',
+			wayNumber: '1929129',
+			partyId: 'p-1',
+			itemName: 'Paddy',
+			load: 293923,
+			empty: 28382,
+			autoCalculate: true,
+			total: 29393,
+			bagCount: 299,
+			kg: 23,
+			freightCharge: 23233,
+			narration: '',
+			price: 1560,
+			amount: 2832832,
+			status: 'active',
+			createdAt: null,
+			updatedAt: null
+		};
+		const party: Party = {
+			id: 'p-1',
+			partyName: 'Prasanna Venkatesh',
+			place: 'Pattukottai',
+			phoneNumber: '9443334307',
+			partyType: 'wholesale',
+			status: 'active',
+			createdAt: null,
+			updatedAt: null
+		};
+
+		const doc = await buildSingleReceipt(tx, party);
+		expect(doc.getNumberOfPages()).toBe(1);
+		const bytes = new Uint8Array(doc.output('arraybuffer'));
+		expect(bytes.byteLength).toBeGreaterThan(1000);
+		expect(String.fromCharCode(...bytes.slice(0, 5))).toBe('%PDF-');
+	});
+
+	it('populates party bank details in Table 3', async () => {
+		const tx: Transaction = {
+			id: 'test-2',
+			transactionDate: new Date('2026-04-24T00:00:00'),
+			purchaseType: 'purchase',
+			wayNumber: '1929130',
+			partyId: 'p-2',
+			itemName: 'Paddy',
+			load: 20000,
+			empty: 5000,
+			autoCalculate: true,
+			total: 15000,
+			bagCount: 241,
+			kg: 58,
+			freightCharge: 500,
+			narration: '',
+			price: 1500,
+			amount: 361500,
+			status: 'active',
+			createdAt: null,
+			updatedAt: null
+		};
+		const party: Party = {
+			id: 'p-2',
+			partyName: 'Ramesh Kumar',
+			place: 'Thanjavur',
+			phoneNumber: '9876543210',
+			partyType: 'farmer',
+			accountName: 'Ramesh Kumar',
+			accountNo: '987654321000',
+			ifscCode: 'SBIN0001234',
+			bankName: 'State Bank of India',
+			status: 'active',
+			createdAt: null,
+			updatedAt: null
+		};
+
+		const doc = await buildSingleReceipt(tx, party);
+		expect(doc.getNumberOfPages()).toBe(1);
+		const bytes = new Uint8Array(doc.output('arraybuffer'));
+		expect(bytes.byteLength).toBeGreaterThan(1000);
+		expect(String.fromCharCode(...bytes.slice(0, 5))).toBe('%PDF-');
+	});
+});
+

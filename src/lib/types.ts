@@ -27,6 +27,10 @@ export interface Party {
 	place: string;
 	phoneNumber: string;
 	partyType: PartyType;
+	accountName?: string;
+	accountNo?: string;
+	ifscCode?: string;
+	bankName?: string;
 	status: Status;
 	createdAt: Date | null;
 	updatedAt: Date | null;
@@ -37,6 +41,10 @@ export interface PartyInput {
 	place: string;
 	phoneNumber: string;
 	partyType: PartyType;
+	accountName?: string;
+	accountNo?: string;
+	ifscCode?: string;
+	bankName?: string;
 	status: Status;
 }
 

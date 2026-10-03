@@ -65,6 +65,10 @@ function toParty(snap: QueryDocumentSnapshot<DocumentData>): Party {
 		phoneNumber: str(d.phoneNumber),
 		// Parties created before party types existed are treated as wholesale.
 		partyType: d.partyType === 'farmer' ? 'farmer' : 'wholesale',
+		accountName: str(d.accountName || d.account_name),
+		accountNo: str(d.accountNo || d.accountNumber || d.accNo || d.account_no),
+		ifscCode: str(d.ifscCode || d.ifsc || d.ifsc_code),
+		bankName: str(d.bankName || d.bank || d.bank_name),
 		status: d.status === 'inactive' ? 'inactive' : 'active',
 		createdAt: toDate(d.createdAt),
 		updatedAt: toDate(d.updatedAt)
@@ -120,7 +124,10 @@ export function matchPartyIds(parties: Party[], search: string): string[] {
 			(p) =>
 				p.partyName.toLowerCase().includes(q) ||
 				p.phoneNumber.toLowerCase().includes(q) ||
-				(phoneQuery.length > 0 && p.phoneNumber.replace(/\D/g, '').includes(phoneQuery))
+				(phoneQuery.length > 0 && p.phoneNumber.replace(/\D/g, '').includes(phoneQuery)) ||
+				(p.accountName && p.accountName.toLowerCase().includes(q)) ||
+				(p.accountNo && p.accountNo.toLowerCase().includes(q)) ||
+				(p.bankName && p.bankName.toLowerCase().includes(q))
 		)
 		.map((p) => p.id);
 }

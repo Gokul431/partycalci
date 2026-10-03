@@ -23,6 +23,10 @@
 		place: '',
 		phoneNumber: '',
 		partyType: 'wholesale',
+		accountName: '',
+		accountNo: '',
+		ifscCode: '',
+		bankName: '',
 		status: 'active',
 		...initial
 	});
@@ -86,6 +90,34 @@
 			</select>
 			{#if errors.status}<p class="field-error">{errors.status}</p>{/if}
 			<p class="mt-1 text-xs text-slate-500">Only active parties can be chosen for new entries.</p>
+		</div>
+	</div>
+
+	<header class="flex flex-wrap items-center justify-between gap-2 border-t border-b border-slate-100 px-5 py-3">
+		<h2 class="text-sm font-semibold text-slate-800">Bank Details</h2>
+		<p class="text-xs text-slate-500">Optional bank information</p>
+	</header>
+
+	<div class="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-4">
+		<div>
+			<label class="label" for="accountName">Account Name</label>
+			<input id="accountName" class="input {errors.accountName ? 'input-error' : ''}" bind:value={values.accountName} maxlength="120" placeholder="e.g. Prasanna Venkatesh" />
+			{#if errors.accountName}<p class="field-error">{errors.accountName}</p>{/if}
+		</div>
+		<div>
+			<label class="label" for="accountNo">Account NO</label>
+			<input id="accountNo" class="input {errors.accountNo ? 'input-error' : ''}" bind:value={values.accountNo} maxlength="50" placeholder="e.g. 123456789012" />
+			{#if errors.accountNo}<p class="field-error">{errors.accountNo}</p>{/if}
+		</div>
+		<div>
+			<label class="label" for="ifscCode">IFSC code</label>
+			<input id="ifscCode" class="input uppercase {errors.ifscCode ? 'input-error' : ''}" bind:value={values.ifscCode} maxlength="20" placeholder="e.g. SBIN0001234" />
+			{#if errors.ifscCode}<p class="field-error">{errors.ifscCode}</p>{/if}
+		</div>
+		<div>
+			<label class="label" for="bankName">Bank Name</label>
+			<input id="bankName" class="input {errors.bankName ? 'input-error' : ''}" bind:value={values.bankName} maxlength="120" placeholder="e.g. State Bank of India" />
+			{#if errors.bankName}<p class="field-error">{errors.bankName}</p>{/if}
 		</div>
 	</div>
 

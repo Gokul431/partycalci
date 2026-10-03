@@ -6,6 +6,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { getTransaction, setTransactionStatus } from '$lib/firebase/firestore';
+	import { downloadSingleReceipt } from '$lib/utils/pdf';
 	import { parties } from '$lib/stores/parties.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { friendlyError } from '$lib/utils/errors';
@@ -82,6 +83,11 @@
 	>
 		{#snippet badge()}<StatusBadge status={tx?.status ?? 'active'} />{/snippet}
 		{#snippet actions()}
+			{#if tx}
+				<button type="button" class="btn-secondary" onclick={() => tx && downloadSingleReceipt(tx, party)}>
+					<Icon name="download" />Download Report
+				</button>
+			{/if}
 			<button type="button" class="btn-secondary" onclick={() => (confirmOpen = true)}>
 				<Icon name="power" />{tx?.status === 'active' ? 'Cancel Entry' : 'Restore Entry'}
 			</button>

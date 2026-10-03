@@ -34,19 +34,31 @@ export type PartyField = keyof PartyInput;
 export function validateParty(input: PartyInput): Result<PartyInput, PartyField> {
 	const data: PartyInput = {
 		partyName: input.partyName.trim().replace(/\s+/g, ' '),
-		place: input.place.trim(),
-		phoneNumber: input.phoneNumber.trim().replace(/\s+/g, ' '),
+		place: (input.place ?? '').trim(),
+		phoneNumber: (input.phoneNumber ?? '').trim().replace(/\s+/g, ' '),
 		partyType: input.partyType,
+		accountName: (input.accountName ?? '').trim().replace(/\s+/g, ' '),
+		accountNo: (input.accountNo ?? '').trim().replace(/\s+/g, ' '),
+		ifscCode: (input.ifscCode ?? '').trim().toUpperCase().replace(/\s+/g, ''),
+		bankName: (input.bankName ?? '').trim().replace(/\s+/g, ' '),
 		status: input.status
 	};
 	const errors: FieldErrors<PartyField> = {};
 	if (!data.partyName) errors.partyName = 'Party name is required.';
 	else if (data.partyName.length > 120) errors.partyName = 'Party name is too long (max 120).';
-	if (data.place.length > 120) errors.place = 'Place is too long (max 120).';
+	if (data.place && data.place.length > 120) errors.place = 'Place is too long (max 120).';
 	const phoneError = validatePhone(data.phoneNumber);
 	if (phoneError) errors.phoneNumber = phoneError;
 	if (data.partyType !== 'wholesale' && data.partyType !== 'farmer')
 		errors.partyType = 'Party type is required.';
+	if (data.accountName && data.accountName.length > 120)
+		errors.accountName = 'Account name is too long (max 120).';
+	if (data.accountNo && data.accountNo.length > 50)
+		errors.accountNo = 'Account number is too long (max 50).';
+	if (data.ifscCode && data.ifscCode.length > 20)
+		errors.ifscCode = 'IFSC code is too long (max 20).';
+	if (data.bankName && data.bankName.length > 120)
+		errors.bankName = 'Bank name is too long (max 120).';
 	if (!isStatus(data.status)) errors.status = 'Status is required.';
 	return Object.keys(errors).length ? { ok: false, errors } : { ok: true, data };
 }

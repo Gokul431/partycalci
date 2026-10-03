@@ -22,12 +22,17 @@ service cloud.firestore {
     function validParty(d) {
       // Parties saved before party types existed have no partyType field: wholesale.
       let keys = ['partyName', 'place', 'phoneNumber', 'status', 'createdAt', 'updatedAt'];
-      return d.keys().hasAll(keys) && d.keys().hasOnly(keys.concat(['partyType']))
+      let optional = ['partyType', 'accountName', 'accountNo', 'ifscCode', 'bankName'];
+      return d.keys().hasAll(keys) && d.keys().hasOnly(keys.concat(optional))
         && requiredText(d.partyName, 120)
         && validText(d.place, 120)
         && validText(d.phoneNumber, 20)
         && (d.phoneNumber == '' || d.phoneNumber.matches('^[0-9+\\- ]{7,20}$'))
         && (!('partyType' in d) || d.partyType in ['wholesale', 'farmer'])
+        && (!('accountName' in d) || validText(d.accountName, 120))
+        && (!('accountNo' in d) || validText(d.accountNo, 50))
+        && (!('ifscCode' in d) || validText(d.ifscCode, 20))
+        && (!('bankName' in d) || validText(d.bankName, 120))
         && validStatus(d.status)
         && d.updatedAt == request.time;
     }

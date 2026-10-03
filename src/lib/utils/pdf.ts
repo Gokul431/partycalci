@@ -37,8 +37,7 @@ const COLUMNS = [
 	// Every point left over goes here: party names are the only values long enough to wrap.
 	{ header: 'Particulars', width: 81, align: 'left' },
 	{ header: 'Item', width: 41, align: 'left' },
-	{ header: 'Load', width: 28, align: 'right' },
-	{ header: 'Empty', width: 31, align: 'right' },
+	{ header: 'Total', width: 42, align: 'right' },
 	{ header: 'Qty.', width: 31, align: 'right' },
 	{ header: 'Bag', width: 24, align: 'right' },
 	{ header: 'Kg', width: 28, align: 'right' },
@@ -99,9 +98,6 @@ function bodyRow(t: Transaction, party: Party | undefined): string[] {
 		formatWayNumber(t.wayNumber, t.purchaseType),
 		[party?.partyName, party?.place].filter(Boolean).join(' '),
 		t.itemName,
-		// Blank on manual entries where Load/Empty were not recorded.
-		t.load == null ? '' : count(t.load),
-		t.empty == null ? '' : count(t.empty),
 		money(t.total),
 		count(t.bagCount),
 		count(t.kg),
@@ -224,4 +220,180 @@ export async function downloadVoucherListing(
 ): Promise<void> {
 	const doc = await buildVoucherListing(rows, partyById, filters);
 	doc.save(voucherFileName(filters));
+}
+
+/** PDF receipt for a single Receive From Party record, matching the reference template image.png. */
+export async function buildSingleReceipt(transaction: Transaction, party: Party | undefined): Promise<any> {
+	const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+		import('jspdf'),
+		import('jspdf-autotable')
+	]);
+
+	if (!party && transaction.partyId) {
+		try {
+			const { getParty } = await import('$lib/firebase/firestore');
+			party = (await getParty(transaction.partyId)) ?? undefined;
+		} catch {
+			// ignore
+		}
+	}
+
+	const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+	const pageWidth = doc.internal.pageSize.getWidth(); // 595.28 pt
+
+	/* ---------- Centered Header ---------- */
+	let y = 60;
+	doc.setTextColor(0);
+	doc.setFont('helvetica', 'bold');
+	doc.setFontSize(14);
+	doc.text('Elumalayayan Modern Rice Mill', pageWidth / 2, y, { align: 'center' });
+
+	y += 16;
+	doc.setFont('helvetica', 'normal');
+	doc.setFontSize(9.5);
+	doc.text('321/1 - Palathali Road, Kalagupulikadu, Alvilam Post', pageWidth / 2, y, { align: 'center' });
+
+	y += 13;
+	doc.text('Pattukkottai - 614602', pageWidth / 2, y, { align: 'center' });
+
+	y += 20;
+	doc.text('Mat. Rcvd from party', pageWidth / 2, y, { align: 'center' });
+
+	y += 18;
+
+	/* ---------- Optional Tamil script shaping for party name ---------- */
+	let shapedName: ShapedText | null = null;
+	if (party?.partyName && needsShaping(party.partyName) && canShape()) {
+		try {
+			await loadShapingFont();
+			shapedName = shapeText(party.partyName, 9, 330 - 12);
+		} catch (e) {
+			console.warn('Tamil PDF font failed to load for receipt', e);
+		}
+	}
+
+	/* ---------- Common Table Styles ---------- */
+	const tableConfig = {
+		theme: 'grid' as const,
+		styles: {
+			font: 'helvetica' as const,
+			fontSize: 9,
+			textColor: 0,
+			lineColor: 0,
+			lineWidth: 0.5,
+			fillColor: false as const,
+			cellPadding: { top: 4.5, bottom: 4.5, left: 6, right: 6 },
+			valign: 'middle' as const
+		},
+		headStyles: { fillColor: false as const },
+		alternateRowStyles: { fillColor: false as const },
+		columnStyles: {
+			0: { cellWidth: 175, halign: 'left' as const },
+			1: { halign: 'left' as const }
+		},
+		margin: { left: 45, right: 45 }
+	};
+
+	/* ---------- Table 1: Date, Way No, Name, Place, Phone ---------- */
+	const d = transaction.transactionDate instanceof Date ? transaction.transactionDate : new Date(transaction.transactionDate);
+	const pad = (n: number) => String(n).padStart(2, '0');
+	const dateFormatted = !isNaN(d.getTime())
+		? `${pad(d.getDate())} / ${pad(d.getMonth() + 1)}/ ${d.getFullYear()}`
+		: '';
+
+	const table1Body = [
+		['Date', dateFormatted],
+		['Way No', transaction.wayNumber || ''],
+		['Name', party?.partyName ?? ''],
+		['Place', party?.place ?? ''],
+		['Phone', party?.phoneNumber ?? '']
+	];
+
+	autoTable(doc, {
+		...tableConfig,
+		startY: y,
+		body: table1Body,
+		didParseCell(data) {
+			if (shapedName && data.row.index === 2 && data.column.index === 1) {
+				data.cell.text = [''];
+			}
+		},
+		didDrawCell(data) {
+			if (shapedName && data.row.index === 2 && data.column.index === 1) {
+				const cellX = data.cell.x + data.cell.padding('left');
+				const cellY = data.cell.y + data.cell.padding('top');
+				doc.addImage(shapedName.image, 'PNG', cellX, cellY, shapedName.width, shapedName.height, shapedName.alias, 'FAST');
+			}
+		}
+	});
+
+	// @ts-expect-error autotable records lastAutoTable on doc
+	y = doc.lastAutoTable.finalY + 16;
+
+	/* ---------- Table 2: Load, Empty, Total, Bag, Kgs, Price, Item Amount, Freight Charge (-), Total Amount ---------- */
+	const loadStr = transaction.load != null ? String(transaction.load) : '';
+	const emptyStr = transaction.empty != null ? String(transaction.empty) : '';
+	const totalStr = transaction.total != null ? String(transaction.total) : '';
+	const bagStr = transaction.bagCount != null ? String(transaction.bagCount) : '';
+	const kgStr = transaction.kg != null ? String(transaction.kg) : '';
+	const priceStr = transaction.price != null && transaction.price !== 0 ? String(transaction.price) : '';
+	const amountStr = transaction.amount != null && transaction.amount !== 0 ? String(transaction.amount) : '';
+	const freightStr = transaction.freightCharge != null ? String(transaction.freightCharge) : '';
+	const totalAmount = calculateTotalAmount(transaction.amount, transaction.freightCharge);
+	const totalAmountStr = totalAmount != null && totalAmount !== 0 ? String(totalAmount) : '';
+
+	const table2Body = [
+		['Load', loadStr],
+		['Empty', emptyStr],
+		['Total', totalStr],
+		['Bag', bagStr],
+		['Kgs', kgStr],
+		['Price', priceStr],
+		['Item Amount', amountStr],
+		['Freight Charge ( - )', freightStr],
+		['Total Amount', totalAmountStr]
+	];
+
+	autoTable(doc, {
+		...tableConfig,
+		startY: y,
+		body: table2Body
+	});
+
+	// @ts-expect-error autotable records lastAutoTable on doc
+	y = doc.lastAutoTable.finalY + 16;
+
+	/* ---------- Table 3: Account Name, Account NO:, IFSC code, Bank Name ---------- */
+	const table3Body = [
+		['Account Name', party?.accountName || party?.partyName || ''],
+		['Account NO:', party?.accountNo || ''],
+		['IFSC code', party?.ifscCode || ''],
+		['Bank Name', party?.bankName || '']
+	];
+
+	autoTable(doc, {
+		...tableConfig,
+		startY: y,
+		body: table3Body
+	});
+
+	// @ts-expect-error autotable records lastAutoTable on doc
+	y = doc.lastAutoTable.finalY + 30;
+
+	/* ---------- Bottom: Verified By ---------- */
+	doc.setFont('helvetica', 'normal');
+	doc.setFontSize(9.5);
+	doc.text('Verified By', 45, y);
+
+	return doc;
+}
+
+/** Download a single-receipt PDF for the given transaction and party. */
+export async function downloadSingleReceipt(
+	transaction: Transaction,
+	party: Party | undefined
+): Promise<void> {
+	const doc = await buildSingleReceipt(transaction, party);
+	const wayNo = transaction.wayNumber ? transaction.wayNumber.trim() : 'receipt';
+	doc.save(`Mat_Received_${wayNo}.pdf`);
 }
