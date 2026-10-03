@@ -6,3 +6,7 @@ node_modules
 !.env.example
 .firebase
 *-debug.log
+image.png
+
+
+
