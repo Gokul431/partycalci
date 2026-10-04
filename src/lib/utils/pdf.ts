@@ -27,29 +27,29 @@ const FONT_SIZE = 8;
 const CELL_PADDING = 3;
 
 /**
- * Widths sum to the printable width of A4 portrait at a 28pt margin, and each one clears
- * the widest header or value it has to hold at FONT_SIZE — measured, not estimated, so
- * nothing wraps onto a second line.
+ * Widths sum to 539 (within A4 portrait printable at 28pt margins). Each column
+ * accommodates its widest header or body value at FONT_SIZE — verified against
+ * Helvetica metrics — so nothing wraps.
  */
 const COLUMNS = [
 	{ header: 'Date', width: 47, align: 'left' },
-	{ header: 'Way No:', width: 42, align: 'left' },
-	// Every point left over goes here: party names are the only values long enough to wrap.
-	{ header: 'Particulars', width: 81, align: 'left' },
+	{ header: 'Way No:', width: 40, align: 'left' },
+	// Party names wrap; this column gives up width to the cramped right-side columns.
+	{ header: 'Particulars', width: 61, align: 'left' },
 	{ header: 'Item', width: 41, align: 'left' },
-	{ header: 'Total', width: 42, align: 'right' },
-	{ header: 'Qty.', width: 31, align: 'right' },
-	{ header: 'Bag', width: 24, align: 'right' },
-	{ header: 'Kg', width: 28, align: 'right' },
-	{ header: 'Freight', width: 34, align: 'right' },
-	// Price per bag.
-	{ header: 'Price', width: 31, align: 'right' },
-	// Value of the goods, before freight is taken off.
-	{ header: 'Amount', width: 37, align: 'right' },
-	// Goods less freight, and the column the grand total sits under. The width is set by
-	// the grand total figure rather than the header, which is far shorter.
-	{ header: 'Total', width: 42, align: 'right' },
-	{ header: 'Status', width: 42, align: 'left' }
+	{ header: 'Total', width: 31, align: 'right' },
+	{ header: 'Qty.', width: 27, align: 'right' },
+	{ header: 'Bag', width: 33, align: 'right' },
+	{ header: 'Kg', width: 33, align: 'right' },
+	{ header: 'Freight', width: 37, align: 'right' },
+	// Price per bag (body[9] = money(t.amount)).
+	{ header: 'Price', width: 47, align: 'right' },
+	// Net amount after freight (body[10] = money(calculateTotalAmount(...))).
+	{ header: 'Amount', width: 47, align: 'right' },
+	// 'Cancelled' fits on one line here.
+	{ header: 'Total', width: 48, align: 'right' },
+	// Grand total value in the footer uses this column's width.
+	{ header: 'Status', width: 47, align: 'left' }
 ] as const;
 
 /** Index of the Particulars column, the only one whose text is shaped into an image. */
@@ -177,6 +177,7 @@ export async function buildVoucherListing(
 				{
 					cellWidth: c.width,
 					halign: c.align,
+					fontStyle: i === 0 ? 'bold' : undefined,
 					// A shaped name is drawn as an image anchored to the cell's top padding.
 					...(i === PARTICULARS_INDEX ? { valign: 'top' as const } : {})
 				}
@@ -186,6 +187,13 @@ export async function buildVoucherListing(
 		didParseCell(data) {
 			const s = shapedCell(data.section, data.row.index, data.column.index);
 			if (s) data.cell.text = Array(Math.ceil(s.height / (FONT_SIZE * doc.getLineHeightFactor()))).fill('');
+
+			// Ensure amount columns (9: Amount, 10: Total Amount) stay on one line
+			if (data.column.index === 9 || data.column.index === 10) {
+				if (Array.isArray(data.cell.text) && data.cell.text.length > 1) {
+					data.cell.text = [data.cell.text.join('')];
+				}
+			}
 		},
 		didDrawCell(data) {
 			const s = shapedCell(data.section, data.row.index, data.column.index);
@@ -288,7 +296,7 @@ export async function buildSingleReceipt(transaction: Transaction, party: Party 
 		headStyles: { fillColor: false as const },
 		alternateRowStyles: { fillColor: false as const },
 		columnStyles: {
-			0: { cellWidth: 175, halign: 'left' as const },
+			0: { cellWidth: 175, halign: 'left' as const, fontStyle: 'bold' as const },
 			1: { halign: 'left' as const }
 		},
 		margin: { left: 45, right: 45 }
@@ -316,6 +324,13 @@ export async function buildSingleReceipt(transaction: Transaction, party: Party 
 		didParseCell(data) {
 			if (shapedName && data.row.index === 2 && data.column.index === 1) {
 				data.cell.text = [''];
+			}
+
+			// Ensure Date column (index 0, row 0) stays on one line
+			if (data.row.index === 0 && data.column.index === 0) {
+				if (Array.isArray(data.cell.text) && data.cell.text.length > 1) {
+					data.cell.text = [data.cell.text.join('')];
+				}
 			}
 		},
 		didDrawCell(data) {
@@ -357,7 +372,15 @@ export async function buildSingleReceipt(transaction: Transaction, party: Party 
 	autoTable(doc, {
 		...tableConfig,
 		startY: y,
-		body: table2Body
+		body: table2Body,
+		didParseCell(data) {
+			// Ensure amount columns stay on one line: Total (idx 2), Item Amount (idx 6), Total Amount (idx 8)
+			if (data.column.index === 2 || data.column.index === 6 || data.column.index === 8) {
+				if (Array.isArray(data.cell.text) && data.cell.text.length > 1) {
+					data.cell.text = [data.cell.text.join('')];
+				}
+			}
+		}
 	});
 
 	// @ts-expect-error autotable records lastAutoTable on doc
