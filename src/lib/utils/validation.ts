@@ -147,11 +147,18 @@ export function validateTransaction(
 	if (!v.transactionDate) errors.transactionDate = 'Date is required.';
 	else if (!date) errors.transactionDate = 'Enter a valid date.';
 
-	if (v.purchaseType !== 'purchase' && v.purchaseType !== 'return')
+	let purchaseType = v.purchaseType;
+	const raw = v.wayNumber.trim();
+	if (/(?:-\s*|(?<=\d))r$/i.test(raw)) {
+		purchaseType = 'return';
+	} else if (/(?:-\s*|(?<=\d))p$/i.test(raw)) {
+		purchaseType = 'purchase';
+	}
+
+	if (purchaseType !== 'purchase' && purchaseType !== 'return')
 		errors.purchaseType = 'Type of purchase is required.';
 
-	const raw = v.wayNumber.trim();
-	const wayNumber = raw ? formatWayNumber(raw, v.purchaseType) : '';
+	const wayNumber = raw ? formatWayNumber(raw, purchaseType) : '';
 	if (!wayNumber) errors.wayNumber = 'Way number is required.';
 	else if (wayNumber.length > 50) errors.wayNumber = 'Way number is too long (max 50).';
 
@@ -179,7 +186,7 @@ export function validateTransaction(
 		ok: true,
 		data: {
 			transactionDate: date,
-			purchaseType: v.purchaseType as TransactionData['purchaseType'],
+			purchaseType: purchaseType as TransactionData['purchaseType'],
 			wayNumber,
 			partyId: v.partyId,
 			itemName,

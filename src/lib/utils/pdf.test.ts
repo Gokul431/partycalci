@@ -281,8 +281,7 @@ describe('single receipt PDF (matching image.png)', () => {
 		};
 
 		const doc = await buildSingleReceipt(tx, party);
-		// @ts-expect-error lastAutoTable on doc
-		const table = doc.lastAutoTable;
+		const table = (doc as any).lastAutoTable;
 		expect(table).toBeDefined();
 		const docString = doc.output();
 		expect(docString).toContain('6574-P');

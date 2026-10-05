@@ -154,12 +154,26 @@
 					id="wayNumber"
 					class="input {errors.wayNumber ? 'input-error' : ''}"
 					bind:value={v.wayNumber}
+					oninput={() => {
+						const trimmed = v.wayNumber.trim();
+						if (/(?:-\s*|(?<=\d))r$/i.test(trimmed)) {
+							v.purchaseType = 'return';
+						} else if (/(?:-\s*|(?<=\d))p$/i.test(trimmed)) {
+							v.purchaseType = 'purchase';
+						}
+					}}
 					onblur={() => {
-						if (v.wayNumber.trim()) {
+						const trimmed = v.wayNumber.trim();
+						if (/(?:-\s*|(?<=\d))r$/i.test(trimmed)) {
+							v.purchaseType = 'return';
+						} else if (/(?:-\s*|(?<=\d))p$/i.test(trimmed)) {
+							v.purchaseType = 'purchase';
+						}
+						if (trimmed) {
 							v.wayNumber = formatWayNumber(v.wayNumber, v.purchaseType);
 						}
 					}}
-					placeholder="e.g. 37473-P"
+					placeholder="e.g. 37473-P or 37473-R"
 					maxlength="50"
 					autocomplete="off"
 				/>
