@@ -9,6 +9,7 @@ import { formatWayNumber } from "./format";
 import {
   canShape,
   loadShapingFont,
+  measureTextWidth,
   needsShaping,
   shapeText,
   type ShapedText,
@@ -63,40 +64,28 @@ const CELL_PADDING = 3;
  */
 
 const COLUMNS = [
-  { header: "Date", width: 47, align: "left" },
-
-  { header: "Way No:", width: 40, align: "left" }, // Party names wrap; this column gives up width to the cramped right-side columns.
-
-  { header: "Particulars", width: 61, align: "left" },
-
-  { header: "Item", width: 41, align: "left" },
-
-  { header: "Total", width: 31, align: "right" },
-
-  { header: "Qty.", width: 27, align: "right" },
-
-  { header: "Bag", width: 33, align: "right" },
-
-  { header: "Kg", width: 33, align: "right" },
-
-  { header: "Freight", width: 37, align: "right" }, // Price per bag (body[9] = money(t.amount)).
-
-  { header: "Price", width: 44, align: "right" }, // Net amount after freight (body[10] = money(calculateTotalAmount(...))).
-
-  { header: "Amount", width: 44, align: "right" }, // 'Cancelled' fits on one line here.
-
-  { header: "Total", width: 45, align: "right" }, // Grand total value in the footer uses this column's width.
-
-  { header: "Status", width: 47, align: "left" },
+  { header: "Date", width: 48, align: "left" },
+  { header: "Way No:", width: 40, align: "left" },
+  { header: "Particulars", width: 66, align: "left" },
+  { header: "Item", width: 38, align: "left" },
+  { header: "Total", width: 36, align: "right" },
+  { header: "Qty.", width: 20, align: "right" },
+  { header: "Bag", width: 28, align: "right" },
+  { header: "Kg", width: 30, align: "right" },
+  { header: "Freight", width: 36, align: "right" },
+  { header: "Price", width: 38, align: "right" },
+  { header: "Amount", width: 50, align: "right" },
+  { header: "Total", width: 52, align: "right" },
+  { header: "Status", width: 44, align: "left" },
 ] as const;
 
 /** Index of the Particulars column, the only one whose text is shaped into an image. */
 
 const PARTICULARS_INDEX = 2;
 
-/** Index of the Total Amount column, which the grand total sits under. */
+/** Index of the Total Amount column, which the grand total sits under (index 11). */
 
-const TOTAL_AMOUNT_INDEX = 12;
+const TOTAL_AMOUNT_INDEX = 11;
 
 /** Total table width, held well within A4 printable to avoid browser-engine rounding issues. */
 
@@ -118,10 +107,12 @@ function fitSingleLineFontSize(
   doc: any,
   text: string,
   availableWidth: number,
+  fontStyle: "normal" | "bold" = "normal",
   startSize = FONT_SIZE,
 ): number {
   if (!text) return startSize;
   let size = startSize;
+  doc.setFont("helvetica", fontStyle);
   while (size > MIN_CELL_FONT_SIZE) {
     doc.setFontSize(size);
     if (doc.getTextWidth(text) <= availableWidth) return size;
@@ -148,17 +139,11 @@ async function shapeCells(body: string[][]): Promise<Map<string, ShapedText>> {
       if (!s) {
         const availableWidth = COLUMNS[c].width - CELL_PADDING * 2;
         let fontSize = FONT_SIZE;
-        let candidate: ShapedText;
-        do {
-          candidate = shapeText(text, fontSize, 1000);
-          if (
-            candidate.width <= availableWidth ||
-            fontSize <= MIN_CELL_FONT_SIZE
-          )
-            break;
+        while (fontSize > MIN_CELL_FONT_SIZE) {
+          if (measureTextWidth(text, fontSize) <= availableWidth) break;
           fontSize -= FONT_SIZE_STEP;
-        } while (fontSize > MIN_CELL_FONT_SIZE);
-        s = candidate;
+        }
+        s = shapeText(text, fontSize, availableWidth);
         byText.set(key, s);
       }
       shaped.set(`${r}:${c}`, s);
@@ -348,17 +333,24 @@ export async function buildVoucherListing(
         data.cell.text = [data.cell.text.join("")];
       }
 
+      // Enforce single-line text across all devices and prevent word/comma splitting
+      data.cell.styles.overflow = "visible";
+
       const text = data.cell.text?.[0] ? String(data.cell.text[0]) : "";
       if (!text) return;
 
       const column = COLUMNS[data.column.index];
       if (!column) return;
 
-      const availableWidth = column.width - CELL_PADDING * 2;
+      const isBold =
+        data.cell.styles.fontStyle === "bold" ||
+        (data.section === "body" && data.column.index === 0);
+      const availableWidth = column.width - CELL_PADDING * 2 - 0.5;
       data.cell.styles.fontSize = fitSingleLineFontSize(
         doc,
         text,
         availableWidth,
+        isBold ? "bold" : "normal",
       );
     },
 
@@ -424,6 +416,38 @@ export async function downloadVoucherListing(
   doc.save(voucherFileName(filters));
 }
 
+/** Pre-renders complex-script cells as single-line images for single receipt tables. */
+async function shapeReceiptCells(
+  body: string[][],
+  colWidths: number[] = [175, 330.28],
+): Promise<Map<string, ShapedText>> {
+  const shaped = new Map<string, ShapedText>();
+  if (!canShape() || !body.some((row) => row.some(needsShaping))) return shaped;
+
+  try {
+    await loadShapingFont();
+  } catch (e) {
+    console.warn("Tamil PDF font failed to load for receipt", e);
+  }
+
+  const byText = new Map<string, ShapedText>();
+  body.forEach((row, r) => {
+    row.forEach((text, c) => {
+      if (!text || !needsShaping(text)) return;
+      const key = `${c}\u0000${text}`;
+      let s = byText.get(key);
+      if (!s) {
+        const availableWidth = (colWidths[c] ?? 330.28) - 12;
+        s = shapeText(text, 9, availableWidth);
+        byText.set(key, s);
+      }
+      shaped.set(`${r}:${c}`, s);
+    });
+  });
+
+  return shaped;
+}
+
 /** PDF receipt for a single Receive From Party record, matching the reference template image.png. */
 
 export async function buildSingleReceipt(
@@ -484,19 +508,9 @@ export async function buildSingleReceipt(
 
   doc.text("Mat. Rcvd from party", pageWidth / 2, y, { align: "center" });
 
-  y += 18; /* ---------- Optional Tamil script shaping for party name ---------- */
+  y += 18;
 
-  let shapedName: ShapedText | null = null;
-
-  if (party?.partyName && needsShaping(party.partyName) && canShape()) {
-    try {
-      await loadShapingFont();
-
-      shapedName = shapeText(party.partyName, 9, 330 - 12);
-    } catch (e) {
-      console.warn("Tamil PDF font failed to load for receipt", e);
-    }
-  } /* ---------- Common Table Styles ---------- */
+  /* ---------- Common Table Styles ---------- */
 
   const tableConfig = {
     theme: "grid" as const,
@@ -534,7 +548,9 @@ export async function buildSingleReceipt(
     },
 
     margin: { left: 45, right: 45 },
-  }; /* ---------- Table 1: Date, Way No, Name, Place, Phone ---------- */
+  };
+
+  /* ---------- Table Bodies ---------- */
 
   const d =
     transaction.transactionDate instanceof Date
@@ -550,7 +566,7 @@ export async function buildSingleReceipt(
   const table1Body = [
     ["Date", dateFormatted],
 
-    ["Way No", transaction.wayNumber || ""],
+    ["Way No", formatWayNumber(transaction.wayNumber, transaction.purchaseType)],
 
     ["Name", party?.partyName ?? ""],
 
@@ -558,49 +574,6 @@ export async function buildSingleReceipt(
 
     ["Phone", party?.phoneNumber ?? ""],
   ];
-
-  autoTable(doc, {
-    ...tableConfig,
-
-    startY: y,
-
-    body: table1Body,
-
-    didParseCell(data) {
-      if (shapedName && data.row.index === 2 && data.column.index === 1) {
-        data.cell.text = [""];
-      } // Ensure Date column (index 0, row 0) stays on one line
-
-      if (data.row.index === 0 && data.column.index === 0) {
-        if (Array.isArray(data.cell.text) && data.cell.text.length > 1) {
-          data.cell.text = [data.cell.text.join("")];
-        }
-      }
-    },
-
-    didDrawCell(data) {
-      if (shapedName && data.row.index === 2 && data.column.index === 1) {
-        const cellX = data.cell.x + data.cell.padding("left");
-
-        const cellY = data.cell.y + data.cell.padding("top");
-
-        doc.addImage(
-          shapedName.image,
-          "PNG",
-          cellX,
-          cellY,
-          shapedName.width,
-          shapedName.height,
-          shapedName.alias,
-          "FAST",
-        );
-      }
-    },
-  }); 
-
-  y =
-    (doc as any).lastAutoTable.finalY +
-    16; /* ---------- Table 2: Load, Empty, Total, Bag, Kgs, Price, Item Amount, Freight Charge (-), Total Amount ---------- */
 
   const loadStr = transaction.load != null ? String(transaction.load) : "";
 
@@ -654,32 +627,6 @@ export async function buildSingleReceipt(
     ["Total Amount", totalAmountStr],
   ];
 
-  autoTable(doc, {
-    ...tableConfig,
-
-    startY: y,
-
-    body: table2Body,
-
-    didParseCell(data) {
-      // Ensure amount columns stay on one line: Total (idx 2), Item Amount (idx 6), Total Amount (idx 8)
-
-      if (
-        data.column.index === 2 ||
-        data.column.index === 6 ||
-        data.column.index === 8
-      ) {
-        if (Array.isArray(data.cell.text) && data.cell.text.length > 1) {
-          data.cell.text = [data.cell.text.join("")];
-        }
-      }
-    },
-  }); 
-
-  y =
-    (doc as any).lastAutoTable.finalY +
-    16; /* ---------- Table 3: Account Name, Account NO:, IFSC code, Bank Name ---------- */
-
   const table3Body = [
     ["Account Name", party?.accountName || party?.partyName || ""],
 
@@ -690,12 +637,157 @@ export async function buildSingleReceipt(
     ["Bank Name", party?.bankName || ""],
   ];
 
+  /* ---------- Complex Script Shaping for Receipt Tables ---------- */
+
+  const [table1Shaped, table2Shaped, table3Shaped] = await Promise.all([
+    shapeReceiptCells(table1Body),
+    shapeReceiptCells(table2Body),
+    shapeReceiptCells(table3Body),
+  ]);
+
+  /* ---------- Table 1: Date, Way No, Name, Place, Phone ---------- */
+
+  autoTable(doc, {
+    ...tableConfig,
+
+    startY: y,
+
+    body: table1Body,
+
+    didParseCell(data) {
+      const s = table1Shaped.get(`${data.row.index}:${data.column.index}`);
+      if (s) {
+        data.cell.text = [""];
+        const neededHeight =
+          s.height + data.cell.padding("top") + data.cell.padding("bottom");
+        if (neededHeight > 19.35) {
+          data.cell.styles.minCellHeight = neededHeight;
+        }
+      }
+
+      // Ensure Date column (index 0, row 0) stays on one line
+      if (data.row.index === 0 && data.column.index === 0) {
+        if (Array.isArray(data.cell.text) && data.cell.text.length > 1) {
+          data.cell.text = [data.cell.text.join("")];
+        }
+      }
+    },
+
+    didDrawCell(data) {
+      const s = table1Shaped.get(`${data.row.index}:${data.column.index}`);
+      if (!s) return;
+
+      const cellX = data.cell.x + data.cell.padding("left");
+      const cellY = data.cell.y + data.cell.padding("top");
+
+      doc.addImage(
+        s.image,
+        "PNG",
+        cellX,
+        cellY,
+        s.width,
+        s.height,
+        s.alias,
+        "FAST",
+      );
+    },
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 16;
+
+  /* ---------- Table 2: Load, Empty, Total, Bag, Kgs, Price, Item Amount, Freight Charge (-), Total Amount ---------- */
+
+  autoTable(doc, {
+    ...tableConfig,
+
+    startY: y,
+
+    body: table2Body,
+
+    didParseCell(data) {
+      const s = table2Shaped.get(`${data.row.index}:${data.column.index}`);
+      if (s) {
+        data.cell.text = [""];
+        const neededHeight =
+          s.height + data.cell.padding("top") + data.cell.padding("bottom");
+        if (neededHeight > 19.35) {
+          data.cell.styles.minCellHeight = neededHeight;
+        }
+      }
+
+      // Ensure amount rows stay on one line: Total (idx 2), Item Amount (idx 6), Total Amount (idx 8)
+      if (
+        data.row.index === 2 ||
+        data.row.index === 6 ||
+        data.row.index === 8
+      ) {
+        if (Array.isArray(data.cell.text) && data.cell.text.length > 1) {
+          data.cell.text = [data.cell.text.join("")];
+        }
+      }
+    },
+
+    didDrawCell(data) {
+      const s = table2Shaped.get(`${data.row.index}:${data.column.index}`);
+      if (!s) return;
+
+      const cellX = data.cell.x + data.cell.padding("left");
+      const cellY = data.cell.y + data.cell.padding("top");
+
+      doc.addImage(
+        s.image,
+        "PNG",
+        cellX,
+        cellY,
+        s.width,
+        s.height,
+        s.alias,
+        "FAST",
+      );
+    },
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 16;
+
+  /* ---------- Table 3: Account Name, Account NO:, IFSC code, Bank Name ---------- */
+
   autoTable(doc, {
     ...tableConfig,
 
     startY: y,
 
     body: table3Body,
+
+    didParseCell(data) {
+      const s = table3Shaped.get(`${data.row.index}:${data.column.index}`);
+      if (s) {
+        data.cell.text = [""];
+        const neededHeight =
+          s.height + data.cell.padding("top") + data.cell.padding("bottom");
+        if (neededHeight > 19.35) {
+          data.cell.styles.minCellHeight = neededHeight;
+        }
+      }
+    },
+
+    didDrawCell(data) {
+      const s = table3Shaped.get(`${data.row.index}:${data.column.index}`);
+      if (!s) return;
+
+      const cellX = data.cell.x + data.cell.padding("left");
+      const cellY = data.cell.y + data.cell.padding("top");
+
+      doc.addImage(
+        s.image,
+        "PNG",
+        cellX,
+        cellY,
+        s.width,
+        s.height,
+        s.alias,
+        "FAST",
+      );
+    },
   }); 
 
   y =
@@ -720,9 +812,10 @@ export async function downloadSingleReceipt(
 ): Promise<void> {
   const doc = await buildSingleReceipt(transaction, party);
 
-  const wayNo = transaction.wayNumber
-    ? transaction.wayNumber.trim()
-    : "receipt";
+  const wayNo = formatWayNumber(
+    transaction.wayNumber,
+    transaction.purchaseType,
+  ).trim() || "receipt";
 
-  doc.save(`Mat_Received\_${wayNo}.pdf`);
+  doc.save(`Mat_Received_${wayNo}.pdf`);
 }

@@ -8,7 +8,7 @@
 		type FieldErrors,
 		type TransactionField
 	} from '$lib/utils/validation';
-	import { formatCurrency, formatNumber } from '$lib/utils/format';
+	import { formatCurrency, formatNumber, formatWayNumber } from '$lib/utils/format';
 	import { friendlyError } from '$lib/utils/errors';
 	import { todayISO } from '$lib/utils/dates';
 	import { toast } from '$lib/stores/toast.svelte';
@@ -134,14 +134,35 @@
 			</div>
 			<div>
 				<label class="label" for="purchaseType">Type of Purchase {@render req()}</label>
-				<select id="purchaseType" class="select {errors.purchaseType ? 'input-error' : ''}" bind:value={v.purchaseType}>
+				<select
+					id="purchaseType"
+					class="select {errors.purchaseType ? 'input-error' : ''}"
+					bind:value={v.purchaseType}
+					onchange={() => {
+						if (v.wayNumber.trim()) {
+							v.wayNumber = formatWayNumber(v.wayNumber, v.purchaseType);
+						}
+					}}
+				>
 					{#each PURCHASE_TYPE_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 				</select>
 				{@render err('purchaseType')}
 			</div>
 			<div>
 				<label class="label" for="wayNumber">Way Number {@render req()}</label>
-				<input id="wayNumber" class="input {errors.wayNumber ? 'input-error' : ''}" bind:value={v.wayNumber} placeholder="e.g. 37473-R" maxlength="50" autocomplete="off" />
+				<input
+					id="wayNumber"
+					class="input {errors.wayNumber ? 'input-error' : ''}"
+					bind:value={v.wayNumber}
+					onblur={() => {
+						if (v.wayNumber.trim()) {
+							v.wayNumber = formatWayNumber(v.wayNumber, v.purchaseType);
+						}
+					}}
+					placeholder="e.g. 37473-P"
+					maxlength="50"
+					autocomplete="off"
+				/>
 				{@render err('wayNumber')}
 			</div>
 			<div class="sm:col-span-2 lg:col-span-1">

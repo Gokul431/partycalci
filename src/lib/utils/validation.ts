@@ -7,6 +7,7 @@ import {
 	looseKg
 } from './calculations';
 import { parseISODate } from './dates';
+import { formatWayNumber } from './format';
 import type { PartyInput, PartyType, TransactionData, TransactionFormValues } from '$lib/types';
 
 export type FieldErrors<K extends string = string> = Partial<Record<K, string>>;
@@ -149,7 +150,8 @@ export function validateTransaction(
 	if (v.purchaseType !== 'purchase' && v.purchaseType !== 'return')
 		errors.purchaseType = 'Type of purchase is required.';
 
-	const wayNumber = v.wayNumber.trim();
+	const raw = v.wayNumber.trim();
+	const wayNumber = raw ? formatWayNumber(raw, v.purchaseType) : '';
 	if (!wayNumber) errors.wayNumber = 'Way number is required.';
 	else if (wayNumber.length > 50) errors.wayNumber = 'Way number is too long (max 50).';
 

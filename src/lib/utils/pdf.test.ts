@@ -202,5 +202,91 @@ describe('single receipt PDF (matching image.png)', () => {
 		expect(bytes.byteLength).toBeGreaterThan(1000);
 		expect(String.fromCharCode(...bytes.slice(0, 5))).toBe('%PDF-');
 	});
+
+	it('handles Tamil characters in party name, place, and account name', async () => {
+		const tx: Transaction = {
+			id: 'test-tamil',
+			transactionDate: new Date('2026-09-30T00:00:00'),
+			purchaseType: 'return',
+			wayNumber: '6574-R',
+			partyId: 'p-tamil',
+			itemName: 'Paddy',
+			load: 3452,
+			empty: 2500,
+			autoCalculate: true,
+			total: 952,
+			bagCount: 15,
+			kg: 22,
+			freightCharge: 500,
+			narration: '',
+			price: 1500,
+			amount: 22500,
+			status: 'active',
+			createdAt: null,
+			updatedAt: null
+		};
+		const party: Party = {
+			id: 'p-tamil',
+			partyName: 'பிரசன்னா வெங்கடேஷ்',
+			place: 'பட்டுக்கோட்டை',
+			phoneNumber: '9443334307',
+			partyType: 'wholesale',
+			accountName: 'பிரசன்னா வெங்கடேஷ்',
+			accountNo: '1234567890',
+			ifscCode: 'SBIN0001234',
+			bankName: 'பாரத ஸ்டேட் வங்கி',
+			status: 'active',
+			createdAt: null,
+			updatedAt: null
+		};
+
+		const doc = await buildSingleReceipt(tx, party);
+		expect(doc.getNumberOfPages()).toBe(1);
+		const bytes = new Uint8Array(doc.output('arraybuffer'));
+		expect(bytes.byteLength).toBeGreaterThan(1000);
+		expect(String.fromCharCode(...bytes.slice(0, 5))).toBe('%PDF-');
+	});
+
+	it('consistently formats way number with purchaseType in receipt PDF', async () => {
+		const tx: Transaction = {
+			id: 'test-wayno',
+			transactionDate: new Date('2026-09-30T00:00:00'),
+			purchaseType: 'purchase',
+			wayNumber: '6574-R', // mismatched raw input in DB
+			partyId: 'p-1',
+			itemName: 'Paddy',
+			load: 952,
+			empty: 0,
+			autoCalculate: false,
+			total: 952,
+			bagCount: 15,
+			kg: 22,
+			freightCharge: 500,
+			narration: '',
+			price: 1500,
+			amount: 22500,
+			status: 'active',
+			createdAt: null,
+			updatedAt: null
+		};
+		const party: Party = {
+			id: 'p-1',
+			partyName: 'Prasanna',
+			place: 'Pattukottai',
+			phoneNumber: '9443334307',
+			partyType: 'wholesale',
+			status: 'active',
+			createdAt: null,
+			updatedAt: null
+		};
+
+		const doc = await buildSingleReceipt(tx, party);
+		// @ts-expect-error lastAutoTable on doc
+		const table = doc.lastAutoTable;
+		expect(table).toBeDefined();
+		const docString = doc.output();
+		expect(docString).toContain('6574-P');
+		expect(docString).not.toContain('6574-R');
+	});
 });
 

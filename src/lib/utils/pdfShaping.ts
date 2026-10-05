@@ -82,6 +82,16 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): st
 	return lines.length ? lines : [''];
 }
 
+/** Measures text width in PDF points using the shaping font stack. */
+export function measureTextWidth(text: string, fontSize: number): number {
+	if (typeof document === 'undefined') return 0;
+	const canvas = document.createElement('canvas');
+	const ctx = canvas.getContext('2d');
+	if (!ctx) return 0;
+	ctx.font = `${fontSize * SCALE}px ${FONT_STACK}`;
+	return ctx.measureText(text.trim()).width / SCALE;
+}
+
 /** Renders text wrapped to `maxWidth` points at `fontSize` points. */
 let aliasSeq = 0;
 
