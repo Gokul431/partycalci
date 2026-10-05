@@ -8,7 +8,7 @@
 		type FieldErrors,
 		type TransactionField
 	} from '$lib/utils/validation';
-	import { formatCurrency, formatNumber, formatWayNumber } from '$lib/utils/format';
+	import { formatCurrency, formatNumber, formatWayNumber, purchaseTypeFromWayNumber } from '$lib/utils/format';
 	import { friendlyError } from '$lib/utils/errors';
 	import { todayISO } from '$lib/utils/dates';
 	import { toast } from '$lib/stores/toast.svelte';
@@ -155,21 +155,13 @@
 					class="input {errors.wayNumber ? 'input-error' : ''}"
 					bind:value={v.wayNumber}
 					oninput={() => {
-						const trimmed = v.wayNumber.trim();
-						if (/(?:-\s*|(?<=\d))r$/i.test(trimmed)) {
-							v.purchaseType = 'return';
-						} else if (/(?:-\s*|(?<=\d))p$/i.test(trimmed)) {
-							v.purchaseType = 'purchase';
-						}
+						const typed = purchaseTypeFromWayNumber(v.wayNumber);
+						if (typed) v.purchaseType = typed;
 					}}
 					onblur={() => {
-						const trimmed = v.wayNumber.trim();
-						if (/(?:-\s*|(?<=\d))r$/i.test(trimmed)) {
-							v.purchaseType = 'return';
-						} else if (/(?:-\s*|(?<=\d))p$/i.test(trimmed)) {
-							v.purchaseType = 'purchase';
-						}
-						if (trimmed) {
+						const typed = purchaseTypeFromWayNumber(v.wayNumber);
+						if (typed) v.purchaseType = typed;
+						if (v.wayNumber.trim()) {
 							v.wayNumber = formatWayNumber(v.wayNumber, v.purchaseType);
 						}
 					}}

@@ -65,17 +65,19 @@ const CELL_PADDING = 3;
 
 const COLUMNS = [
   { header: "Date", width: 48, align: "left" },
-  { header: "Way No:", width: 40, align: "left" },
-  { header: "Particulars", width: 66, align: "left" },
-  { header: "Item", width: 38, align: "left" },
+  { header: "Way No:", width: 42, align: "left" },
+  { header: "Particulars", width: 74, align: "left" },
+  { header: "Item", width: 44, align: "left" },
   { header: "Total", width: 36, align: "right" },
-  { header: "Qty.", width: 20, align: "right" },
   { header: "Bag", width: 28, align: "right" },
   { header: "Kg", width: 30, align: "right" },
-  { header: "Freight", width: 36, align: "right" },
-  { header: "Price", width: 38, align: "right" },
-  { header: "Amount", width: 50, align: "right" },
-  { header: "Total", width: 52, align: "right" },
+  // Money columns are sized so Indian-grouped crore figures print whole at FONT_SIZE:
+  // 9,99,99,999 measures 48pt, 99,99,99,999 measures 53pt, and the grand total under
+  // Total can run a digit longer again.
+  { header: "Freight", width: 50, align: "right" },
+  { header: "Price", width: 31, align: "right" },
+  { header: "Amount", width: 53, align: "right" },
+  { header: "Total", width: 59, align: "right" },
   { header: "Status", width: 44, align: "left" },
 ] as const;
 
@@ -85,7 +87,7 @@ const PARTICULARS_INDEX = 2;
 
 /** Index of the Total Amount column, which the grand total sits under (index 11). */
 
-const TOTAL_AMOUNT_INDEX = 11;
+const TOTAL_AMOUNT_INDEX = 10;
 
 /** Total table width, held well within A4 printable to avoid browser-engine rounding issues. */
 
@@ -98,6 +100,48 @@ const TABLE_WIDTH = COLUMNS.reduce((s: number, c) => s + c.width, 0);
  * "row:column". Empty outside a browser, where cells fall back to plain text.
 
  */
+
+/** Shaped party names print bold, to match the weight of the Latin names in the same column. */
+const SHAPED_BOLD = true;
+
+/** Body size of the single-receipt tables; shaped cells must match it or they look off. */
+const RECEIPT_FONT_SIZE = 9;
+
+/** Label / value column widths of the receipt tables, inside the 45pt page margins. */
+const RECEIPT_COL_WIDTHS = [175, 330.28];
+
+/**
+ * Keeps a receipt value on one line without letting it run past its cell. Re-joining the
+ * wrapped lines alone would stop a number splitting at a comma but leave an over-long
+ * value overlapping whatever sits beside it, so the font is then shrunk until it fits.
+ */
+function fitReceiptCell(
+  doc: unknown,
+  data: {
+    cell: {
+      text: string[];
+      styles: { fontSize: number; fontStyle: string };
+      padding: (side: "left" | "right") => number;
+    };
+    column: { index: number };
+  },
+): void {
+  if (Array.isArray(data.cell.text) && data.cell.text.length > 1) {
+    data.cell.text = [data.cell.text.join("")];
+  }
+  const text = data.cell.text?.[0] ? String(data.cell.text[0]) : "";
+  if (!text) return;
+  const width = RECEIPT_COL_WIDTHS[data.column.index] ?? RECEIPT_COL_WIDTHS[1];
+  const inner =
+    width - data.cell.padding("left") - data.cell.padding("right") - 0.5;
+  data.cell.styles.fontSize = fitSingleLineFontSize(
+    doc,
+    text,
+    inner,
+    data.cell.styles.fontStyle === "bold" ? "bold" : "normal",
+    RECEIPT_FONT_SIZE,
+  );
+}
 
 const MIN_CELL_FONT_SIZE = 4.5;
 const FONT_SIZE_STEP = 0.25;
@@ -138,12 +182,22 @@ async function shapeCells(body: string[][]): Promise<Map<string, ShapedText>> {
       let s = byText.get(key);
       if (!s) {
         const availableWidth = COLUMNS[c].width - CELL_PADDING * 2;
+        // Prefer wrapping over shrinking. Shrinking until a whole name fits on one line
+        // drove long Tamil names down to the 4.5pt floor, half the size of the Latin text
+        // beside them — and shapeText wrapped them anyway. Only shrink when a single word
+        // is too wide, since that is the one case wrapping cannot solve.
+        const longestWord = text
+          .trim()
+          .split(/\s+/)
+          .reduce((a, b) => (b.length > a.length ? b : a), "");
         let fontSize = FONT_SIZE;
-        while (fontSize > MIN_CELL_FONT_SIZE) {
-          if (measureTextWidth(text, fontSize) <= availableWidth) break;
+        while (
+          fontSize > MIN_CELL_FONT_SIZE &&
+          measureTextWidth(longestWord, fontSize, SHAPED_BOLD) > availableWidth
+        ) {
           fontSize -= FONT_SIZE_STEP;
         }
-        s = shapeText(text, fontSize, availableWidth);
+        s = shapeText(text, fontSize, availableWidth, SHAPED_BOLD);
         byText.set(key, s);
       }
       shaped.set(`${r}:${c}`, s);
@@ -175,10 +229,6 @@ function bodyRow(t: Transaction, party: Party | undefined): string[] {
     [party?.partyName, party?.place].filter(Boolean).join(" "),
     t.itemName,
     money(t.total),
-
-    // Qty column — intentionally blank
-    "",
-
     count(t.bagCount),
     count(t.kg),
     money(t.freightCharge),
@@ -345,7 +395,15 @@ export async function buildVoucherListing(
       const isBold =
         data.cell.styles.fontStyle === "bold" ||
         (data.section === "body" && data.column.index === 0);
-      const availableWidth = column.width - CELL_PADDING * 2 - 0.5;
+      // Measure against the width the cell actually occupies. The footer's "Grand Total"
+      // label spans most of the table, so sizing it against column 0 alone shrank it far
+      // more than needed.
+      const span = data.cell.colSpan ?? 1;
+      let spannedWidth = 0;
+      for (let i = 0; i < span; i++) {
+        spannedWidth += COLUMNS[data.column.index + i]?.width ?? 0;
+      }
+      const availableWidth = spannedWidth - CELL_PADDING * 2 - 0.5;
       data.cell.styles.fontSize = fitSingleLineFontSize(
         doc,
         text,
@@ -438,7 +496,9 @@ async function shapeReceiptCells(
       let s = byText.get(key);
       if (!s) {
         const availableWidth = (colWidths[c] ?? 330.28) - 12;
-        s = shapeText(text, 9, availableWidth);
+        // Same weight compensation as the listing: Noto Sans Tamil has lighter stems than
+        // Helvetica, so without this a shaped name reads washed out beside Latin text.
+        s = shapeText(text, RECEIPT_FONT_SIZE, availableWidth, SHAPED_BOLD);
         byText.set(key, s);
       }
       shaped.set(`${r}:${c}`, s);
@@ -518,7 +578,7 @@ export async function buildSingleReceipt(
     styles: {
       font: "helvetica" as const,
 
-      fontSize: 9,
+      fontSize: RECEIPT_FONT_SIZE,
 
       textColor: 0,
 
@@ -665,12 +725,7 @@ export async function buildSingleReceipt(
         }
       }
 
-      // Ensure Date column (index 0, row 0) stays on one line
-      if (data.row.index === 0 && data.column.index === 0) {
-        if (Array.isArray(data.cell.text) && data.cell.text.length > 1) {
-          data.cell.text = [data.cell.text.join("")];
-        }
-      }
+      fitReceiptCell(doc, data);
     },
 
     didDrawCell(data) {
@@ -715,16 +770,9 @@ export async function buildSingleReceipt(
         }
       }
 
-      // Ensure amount rows stay on one line: Total (idx 2), Item Amount (idx 6), Total Amount (idx 8)
-      if (
-        data.row.index === 2 ||
-        data.row.index === 6 ||
-        data.row.index === 8
-      ) {
-        if (Array.isArray(data.cell.text) && data.cell.text.length > 1) {
-          data.cell.text = [data.cell.text.join("")];
-        }
-      }
+      // Every row, not a hardcoded list of indices: adding or reordering a row must not
+      // silently drop a value back to wrapping mid-number.
+      fitReceiptCell(doc, data);
     },
 
     didDrawCell(data) {
@@ -768,6 +816,9 @@ export async function buildSingleReceipt(
           data.cell.styles.minCellHeight = neededHeight;
         }
       }
+
+      // Account numbers and IFSC codes must not wrap either.
+      fitReceiptCell(doc, data);
     },
 
     didDrawCell(data) {

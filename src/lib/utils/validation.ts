@@ -7,7 +7,7 @@ import {
 	looseKg
 } from './calculations';
 import { parseISODate } from './dates';
-import { formatWayNumber } from './format';
+import { formatWayNumber, purchaseTypeFromWayNumber } from './format';
 import type { PartyInput, PartyType, TransactionData, TransactionFormValues } from '$lib/types';
 
 export type FieldErrors<K extends string = string> = Partial<Record<K, string>>;
@@ -147,13 +147,10 @@ export function validateTransaction(
 	if (!v.transactionDate) errors.transactionDate = 'Date is required.';
 	else if (!date) errors.transactionDate = 'Enter a valid date.';
 
-	let purchaseType = v.purchaseType;
 	const raw = v.wayNumber.trim();
-	if (/(?:-\s*|(?<=\d))r$/i.test(raw)) {
-		purchaseType = 'return';
-	} else if (/(?:-\s*|(?<=\d))p$/i.test(raw)) {
-		purchaseType = 'purchase';
-	}
+	// A letter typed into the way number wins over the dropdown, so the suffix the user
+	// sees in the list and the PDF is always the one they typed.
+	const purchaseType = purchaseTypeFromWayNumber(raw) ?? v.purchaseType;
 
 	if (purchaseType !== 'purchase' && purchaseType !== 'return')
 		errors.purchaseType = 'Type of purchase is required.';

@@ -1,3 +1,5 @@
+import type { PurchaseType } from '$lib/types';
+
 const numberFmt = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 3 });
 const currencyFmt = new Intl.NumberFormat('en-IN', {
 	style: 'currency',
@@ -22,12 +24,24 @@ export function purchaseTypeLabel(t: string): string {
 	return t === 'return' ? 'Return' : 'Purchase';
 }
 
-/** A trailing -R / -P (or R/P straight after a digit) typed by the user. */
-const WAY_SUFFIX = /(?:\s*-\s*|(?<=\d))[rp]$/i;
+/**
+ * A trailing R/P typed by the user: after a hyphen, after a space, or straight after a
+ * digit. This is the single definition of the rule — the form and validation both read a
+ * typed letter through `purchaseTypeFromWayNumber`, so a letter can never be detected in
+ * one place and missed in another.
+ */
+const WAY_SUFFIX = /(?:\s*-\s*|\s+|(?<=\d))[rp]$/i;
 
 /** Way number without any R/P suffix the user typed. */
 export function wayNumberBase(wayNumber: string): string {
 	return wayNumber.trim().replace(WAY_SUFFIX, '');
+}
+
+/** The type a typed way number implies, or null when it carries no R/P suffix. */
+export function purchaseTypeFromWayNumber(wayNumber: string): PurchaseType | null {
+	const match = WAY_SUFFIX.exec(wayNumber.trim());
+	if (!match) return null;
+	return match[0].trim().toLowerCase().endsWith('r') ? 'return' : 'purchase';
 }
 
 /**

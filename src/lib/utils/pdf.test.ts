@@ -190,7 +190,7 @@ describe('single receipt PDF (matching image.png)', () => {
 			accountName: 'Ramesh Kumar',
 			accountNo: '987654321000',
 			ifscCode: 'SBIN0001234',
-			bankName: 'State Bank of India',
+			bankName: 'State Bank of India and Commercial Banking Corporation Limited Pattukkottai Main Branch Thanjavur',
 			status: 'active',
 			createdAt: null,
 			updatedAt: null
@@ -289,3 +289,244 @@ describe('single receipt PDF (matching image.png)', () => {
 	});
 });
 
+
+describe('crore-scale amounts', () => {
+	/** A plausible load, but every money value pushed into crores. */
+	function croreFixture() {
+		const partyById = new Map<string, Party>();
+		partyById.set('p1', {
+			id: 'p1',
+			partyName: 'Karthick',
+			place: 'KLU',
+			phoneNumber: '9626540553',
+			partyType: 'wholesale',
+			status: 'active',
+			createdAt: null,
+			updatedAt: null
+		});
+		const rows: Transaction[] = [
+			{
+				id: '1',
+				transactionDate: new Date('2026-08-01T00:00:00'),
+				purchaseType: 'purchase',
+				wayNumber: '74808',
+				partyId: 'p1',
+				itemName: 'DLX-OLD',
+				load: 99999,
+				empty: 1,
+				total: 99998,
+				autoCalculate: true,
+				bagCount: 1612,
+				kg: 12,
+				freightCharge: 99999999,
+				narration: '',
+				price: 99999,
+				amount: 999999999,
+				status: 'active',
+				createdAt: null,
+				updatedAt: null
+			}
+		];
+		return { rows, partyById };
+	}
+
+	it('prints crore figures whole, on one line, without shrinking the font', async () => {
+		const { rows, partyById } = croreFixture();
+		const doc = await buildVoucherListing(rows, partyById, FILTERS);
+		// @ts-expect-error autotable records the finished table on the document.
+		const table = doc.lastAutoTable;
+
+		// Nothing wrapped: a second line would make a row taller than the rest.
+		const heights: number[] = [...table.head, ...table.body, ...table.foot].map(
+			(r: { height: number }) => r.height
+		);
+		expect(Math.max(...heights)).toBe(Math.min(...heights));
+
+		// And nothing was shrunk to achieve it — every money cell is still at full size.
+		const headSize = table.head[0].cells[0].styles.fontSize;
+		for (const cell of Object.values(table.body[0].cells) as { styles: { fontSize: number } }[]) {
+			expect(cell.styles.fontSize).toBe(headSize);
+		}
+	});
+});
+
+describe('no cell ever overflows its column', () => {
+	/**
+	 * Cells are drawn with overflow "visible" so long numbers are never split across a
+	 * comma. The price of that is a value too wide for its column spills over the
+	 * neighbour instead of wrapping — which is what produced overlapping figures in the
+	 * printed listing. jsPDF's Helvetica metrics are deterministic, so proving every cell
+	 * fits here proves it on every device.
+	 */
+	function assertNoOverflow(built: Awaited<ReturnType<typeof buildVoucherListing>>) {
+		const doc = built as unknown as {
+			lastAutoTable: Record<'head' | 'body' | 'foot', { cells: Record<string, unknown> }[]>;
+			setFont: (name: string, style: string) => void;
+			setFontSize: (size: number) => void;
+			getTextWidth: (text: string) => number;
+		};
+		const table = doc.lastAutoTable;
+		const measure = (text: string, size: number, bold: boolean) => {
+			doc.setFont('helvetica', bold ? 'bold' : 'normal');
+			doc.setFontSize(size);
+			return doc.getTextWidth(text);
+		};
+		const offenders: string[] = [];
+		for (const section of ['head', 'body', 'foot'] as const) {
+			for (const row of table[section]) {
+				for (const cell of Object.values(row.cells) as {
+					text: string[];
+					width: number;
+					styles: { fontSize: number; fontStyle: string };
+					padding: (s: string) => number;
+				}[]) {
+					const text = (cell.text ?? []).join('');
+					if (!text) continue;
+					const inner = cell.width - cell.padding('left') - cell.padding('right');
+					const drawn = measure(text, cell.styles.fontSize, cell.styles.fontStyle === 'bold');
+					if (drawn > inner) {
+						offenders.push(`${section} "${text}" needs ${drawn.toFixed(1)}pt in ${inner.toFixed(1)}pt`);
+					}
+				}
+			}
+		}
+		expect(offenders).toEqual([]);
+	}
+
+	it('fits the reference listing', async () => {
+		const { rows, partyById } = fixture();
+		assertNoOverflow(await buildVoucherListing(rows, partyById, FILTERS));
+	});
+
+	it('fits crore money, six-figure weights and a cancelled row', async () => {
+		const partyById = new Map<string, Party>();
+		partyById.set('p1', {
+			id: 'p1',
+			partyName: 'Karthick',
+			place: 'KLU',
+			phoneNumber: '9626540553',
+			partyType: 'wholesale',
+			status: 'active',
+			createdAt: null,
+			updatedAt: null
+		});
+		const wide: Transaction[] = [
+			{
+				id: 'w1',
+				transactionDate: new Date('2026-08-01T00:00:00'),
+				purchaseType: 'purchase',
+				wayNumber: '74808',
+				partyId: 'p1',
+				itemName: 'DLX-OLD',
+				load: 999999,
+				empty: 1,
+				total: 999999,
+				autoCalculate: true,
+				bagCount: 9999,
+				kg: 19358,
+				freightCharge: 99999999,
+				narration: '',
+				price: 99999,
+				amount: 999999999,
+				status: 'inactive',
+				createdAt: null,
+				updatedAt: null
+			}
+		];
+		assertNoOverflow(await buildVoucherListing(wide, partyById, FILTERS));
+	});
+});
+
+describe('receipt cells never overflow either', () => {
+	const LONG_PARTY: Party = {
+		id: 'p1',
+		partyName: 'Venkatachalapathy Subramaniam',
+		place: 'Thiruvarur District',
+		phoneNumber: '9626540553',
+		partyType: 'farmer',
+		accountName: 'Venkatachalapathy Subramaniam',
+		accountNo: '123456789012345678',
+		ifscCode: 'SBIN0001234',
+		bankName: 'State Bank of India and Commercial Banking Corporation Limited Pattukkottai Main Branch Thanjavur',
+		status: 'active',
+		createdAt: null,
+		updatedAt: null
+	};
+
+	const EXTREME: Transaction = {
+		id: '1',
+		transactionDate: new Date('2026-08-01T00:00:00'),
+		purchaseType: 'purchase',
+		wayNumber: '74808',
+		partyId: 'p1',
+		itemName: 'DLX-OLD',
+		load: 999999,
+		empty: 1,
+		total: 999998,
+		autoCalculate: true,
+		bagCount: 9999,
+		kg: 19358,
+		freightCharge: 99999999,
+		narration: '',
+		price: 99999,
+		amount: 999999999,
+		status: 'active',
+		createdAt: null,
+		updatedAt: null
+	};
+
+	it('keeps every cell of the last receipt table inside its column', async () => {
+		const built = await buildSingleReceipt(EXTREME, LONG_PARTY);
+		const doc = built as unknown as {
+			lastAutoTable: { body: { cells: Record<string, unknown> }[] };
+			setFont: (n: string, s: string) => void;
+			setFontSize: (n: number) => void;
+			getTextWidth: (t: string) => number;
+		};
+		const offenders: string[] = [];
+		for (const row of doc.lastAutoTable.body) {
+			for (const cell of Object.values(row.cells) as {
+				text: string[];
+				width: number;
+				styles: { fontSize: number; fontStyle: string };
+				padding: (s: string) => number;
+			}[]) {
+				const text = (cell.text ?? []).join('');
+				if (!text) continue;
+				doc.setFont('helvetica', cell.styles.fontStyle === 'bold' ? 'bold' : 'normal');
+				doc.setFontSize(cell.styles.fontSize);
+				const inner = cell.width - cell.padding('left') - cell.padding('right');
+				if (doc.getTextWidth(text) > inner) offenders.push(`"${text}"`);
+			}
+		}
+		expect(offenders).toEqual([]);
+	});
+
+	it('leaves the widest realistic label and value room to fit', async () => {
+		// All three receipt tables share one config, so proving the widest content fits
+		// the 175 / 330.28pt columns proves it for every row in every one of them.
+		const built = await buildSingleReceipt(EXTREME, LONG_PARTY);
+		const doc = built as unknown as {
+			setFont: (n: string, s: string) => void;
+			setFontSize: (n: number) => void;
+			getTextWidth: (t: string) => number;
+		};
+		const fits = (text: string, columnWidth: number, bold: boolean) => {
+			doc.setFont('helvetica', bold ? 'bold' : 'normal');
+			doc.setFontSize(9);
+			return doc.getTextWidth(text) <= columnWidth - 12 - 0.5;
+		};
+		for (const label of ['Freight Charge ( - )', 'Total Amount', 'Account Name', 'Bank Name']) {
+			expect(fits(label, 175, true), `label ${label}`).toBe(true);
+		}
+		for (const value of [
+			'99,99,99,999',
+			'123456789012345678',
+			'State Bank of India',
+			'Venkatachalapathy Subramaniam',
+			'37473-R'
+		]) {
+			expect(fits(value, 330.28, false), `value ${value}`).toBe(true);
+		}
+	});
+});

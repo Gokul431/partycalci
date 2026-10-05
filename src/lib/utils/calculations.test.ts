@@ -232,3 +232,44 @@ describe('manual weights (auto-calculate off)', () => {
 		expect(computeWeights({ ...manual, kg: -5 }).errors.kg).toBeDefined();
 	});
 });
+
+describe('way number and purchase type stay in step', () => {
+	it('lets a typed -R override a Purchase dropdown', () => {
+		const r = validateTransaction({ ...base, wayNumber: '37473-R', purchaseType: 'purchase' }, 'wholesale');
+		expect(r.ok).toBe(true);
+		if (r.ok) {
+			expect(r.data.purchaseType).toBe('return');
+			expect(r.data.wayNumber).toBe('37473-R');
+		}
+	});
+
+	it('lets a typed -P override a Return dropdown', () => {
+		const r = validateTransaction({ ...base, wayNumber: '37473-P', purchaseType: 'return' }, 'wholesale');
+		expect(r.ok && r.data.purchaseType).toBe('purchase');
+		expect(r.ok && r.data.wayNumber).toBe('37473-P');
+	});
+
+	it('keeps a letter typed after a space rather than printing it twice', () => {
+		const r = validateTransaction({ ...base, wayNumber: '37473 P', purchaseType: 'return' }, 'wholesale');
+		expect(r.ok && r.data.wayNumber).toBe('37473-P');
+	});
+
+	it('falls back to the dropdown when no letter is typed', () => {
+		const asReturn = validateTransaction({ ...base, wayNumber: '37473', purchaseType: 'return' }, 'wholesale');
+		expect(asReturn.ok && asReturn.data.wayNumber).toBe('37473-R');
+		const asPurchase = validateTransaction({ ...base, wayNumber: '37473', purchaseType: 'purchase' }, 'wholesale');
+		expect(asPurchase.ok && asPurchase.data.wayNumber).toBe('37473-P');
+	});
+
+	it('stores a suffix that always matches the stored type', () => {
+		for (const wayNumber of ['37473-R', '37473-P', '37473R', '37473 P', '37473', 'TRIP']) {
+			for (const dropdown of ['purchase', 'return'] as const) {
+				const r = validateTransaction({ ...base, wayNumber, purchaseType: dropdown }, 'wholesale');
+				expect(r.ok).toBe(true);
+				if (!r.ok) continue;
+				const expected = r.data.purchaseType === 'return' ? 'R' : 'P';
+				expect(r.data.wayNumber.endsWith(`-${expected}`)).toBe(true);
+			}
+		}
+	});
+});

@@ -82,23 +82,36 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): st
 	return lines.length ? lines : [''];
 }
 
+/**
+ * Only the Regular face is bundled, so bold is synthesised by the browser. Noto Sans Tamil
+ * has lighter stems than Helvetica, and without this the shaped names read washed out
+ * beside the Latin text in the same column.
+ */
+const cssFont = (fontSize: number, bold: boolean) =>
+	`${bold ? 'bold ' : ''}${fontSize * SCALE}px ${FONT_STACK}`;
+
 /** Measures text width in PDF points using the shaping font stack. */
-export function measureTextWidth(text: string, fontSize: number): number {
+export function measureTextWidth(text: string, fontSize: number, bold = false): number {
 	if (typeof document === 'undefined') return 0;
 	const canvas = document.createElement('canvas');
 	const ctx = canvas.getContext('2d');
 	if (!ctx) return 0;
-	ctx.font = `${fontSize * SCALE}px ${FONT_STACK}`;
+	ctx.font = cssFont(fontSize, bold);
 	return ctx.measureText(text.trim()).width / SCALE;
 }
 
 /** Renders text wrapped to `maxWidth` points at `fontSize` points. */
 let aliasSeq = 0;
 
-export function shapeText(text: string, fontSize: number, maxWidth: number): ShapedText {
+export function shapeText(
+	text: string,
+	fontSize: number,
+	maxWidth: number,
+	bold = false
+): ShapedText {
 	const canvas = document.createElement('canvas');
 	const ctx = canvas.getContext('2d')!;
-	const font = `${fontSize * SCALE}px ${FONT_STACK}`;
+	const font = cssFont(fontSize, bold);
 	ctx.font = font;
 	const lines = wrap(ctx, text.trim(), maxWidth * SCALE);
 	const lineHeight = fontSize * SHAPED_LINE_HEIGHT;
@@ -113,6 +126,8 @@ export function shapeText(text: string, fontSize: number, maxWidth: number): Sha
 
 	return {
 		image: canvas.toDataURL('image/png'),
+		// Distinct per weight as well as per text, so a bold and a regular rendering of the
+		// same name are not deduplicated into one embedded image.
 		alias: `shaped-${++aliasSeq}`,
 		width: maxWidth,
 		height: lines.length * lineHeight
