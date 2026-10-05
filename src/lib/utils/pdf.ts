@@ -4,7 +4,7 @@ import { calculateTotalAmount } from "./calculations";
 
 import { parseISODate } from "./dates";
 
-import { formatWayNumber } from "./format";
+import { entryStatusLabel, formatWayNumber, looseKgDisplay } from "./format";
 
 import {
   canShape,
@@ -66,7 +66,7 @@ const CELL_PADDING = 3;
 const COLUMNS = [
   { header: "Date", width: 48, align: "left" },
   { header: "Way No:", width: 42, align: "left" },
-  { header: "Particulars", width: 74, align: "left" },
+  { header: "Particulars", width: 72, align: "left" },
   { header: "Item", width: 44, align: "left" },
   { header: "Total", width: 36, align: "right" },
   { header: "Bag", width: 28, align: "right" },
@@ -78,7 +78,7 @@ const COLUMNS = [
   { header: "Price", width: 31, align: "right" },
   { header: "Amount", width: 53, align: "right" },
   { header: "Total", width: 59, align: "right" },
-  { header: "Status", width: 44, align: "left" },
+  { header: "Status", width: 46, align: "left" },
 ] as const;
 
 /** Index of the Particulars column, the only one whose text is shaped into an image. */
@@ -103,6 +103,7 @@ const TABLE_WIDTH = COLUMNS.reduce((s: number, c) => s + c.width, 0);
 
 /** Shaped party names print bold, to match the weight of the Latin names in the same column. */
 const SHAPED_BOLD = true;
+
 
 /** Body size of the single-receipt tables; shaped cells must match it or they look off. */
 const RECEIPT_FONT_SIZE = 9;
@@ -230,13 +231,13 @@ function bodyRow(t: Transaction, party: Party | undefined): string[] {
     t.itemName,
     money(t.total),
     count(t.bagCount),
-    count(t.kg),
+    looseKgDisplay(party?.partyType, t.kg, count),
     money(t.freightCharge),
 
     t.price ? money(t.price) : "",
     money(t.amount),
     money(calculateTotalAmount(t.amount, t.freightCharge)),
-    t.status === "inactive" ? "Cancelled" : "",
+    entryStatusLabel(t.status),
   ];
 }
 
@@ -644,7 +645,7 @@ export async function buildSingleReceipt(
   const bagStr =
     transaction.bagCount != null ? String(transaction.bagCount) : "";
 
-  const kgStr = transaction.kg != null ? String(transaction.kg) : "";
+  const kgStr = looseKgDisplay(party?.partyType, transaction.kg, String);
 
   const priceStr =
     transaction.price != null && transaction.price !== 0

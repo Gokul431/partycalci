@@ -146,8 +146,8 @@
 	{#snippet head()}
 		<tr>
 			<th class="th">Party Name</th><th class="th">Place</th><th class="th">Phone Number</th>
-			<th class="th num" title="Entries not cancelled">Active Bills</th>
-			<th class="th num" title="All entries, including cancelled">Total Bills</th>
+			<th class="th num" title="Bills still pending">Pending Bills</th>
+			<th class="th num" title="All bills, pending and completed">Total Bills</th>
 			<th class="th num" title="Load − Empty across active bills">Total Weight</th><th class="th">Last Entry</th>
 			<th class="th">Status</th><th class="th w-16 text-right">Actions</th>
 		</tr>

@@ -21,7 +21,11 @@ const MESSAGES: Record<string, string> = {
 		'Sign-in is not set up for this app yet. Enable Email/Password in Firebase Authentication.',
 	'auth/operation-not-allowed':
 		'Email/password sign-in is disabled. Enable it in Firebase Authentication.',
-	'auth/network-request-failed': 'Network error. Check your internet connection.'
+	'auth/network-request-failed': 'Network error. Check your internet connection.',
+	// Raised when confirming the current password to change a credential.
+	'auth/weak-password': 'Choose a password of at least 6 characters.',
+	'auth/email-already-in-use': 'That email address is already in use by another account.',
+	'auth/requires-recent-login': 'Your session is too old for this change. Sign out, sign in again, then retry.'
 };
 
 /** Converts any thrown value into a friendly message; raw details go to the console only. */

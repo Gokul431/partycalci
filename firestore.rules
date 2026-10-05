@@ -58,6 +58,8 @@ service cloud.firestore {
     // With autoCalculate == false nothing is derived: the user types total, bagCount
     // and kg directly (load/empty optional), so no relation between them is enforced.
     // Entries saved before the toggle existed have no autoCalculate field: auto.
+    // Only a farmer is paid for the loose remainder, so a wholesale party's entries must
+    // record kg == 0 in either mode (billsLooseKg in src/lib/utils/calculations.ts).
     function isAuto(d) { return !('autoCalculate' in d) || d.autoCalculate == true; }
     function optionalWeight(n) { return n == null || nonNegative(n); }
 
@@ -67,7 +69,7 @@ service cloud.firestore {
         && d.empty <= d.load
         && d.total == d.load - d.empty
         && d.bagCount == math.floor(d.total / 62)
-        && d.kg == d.total - d.bagCount * 62;
+        && d.kg == (billsLooseKg(d.partyId) ? d.total - d.bagCount * 62 : 0);
     }
 
     function manualWeights(d) {
@@ -76,10 +78,15 @@ service cloud.firestore {
         && optionalWeight(d.empty)
         && (d.load == null || d.empty == null || d.empty <= d.load)
         && nonNegative(d.total)
-        && nonNegative(d.kg);
+        && (billsLooseKg(d.partyId) ? nonNegative(d.kg) : d.kg == 0);
     }
 
     function partyDoc(id) { return /databases/$(database)/documents/parties/$(id); }
+
+    // Parties saved before party types existed have no partyType field: wholesale.
+    function billsLooseKg(id) {
+      return get(partyDoc(id)).data.get('partyType', 'wholesale') == 'farmer';
+    }
 
     function validTransaction(d) {
       let keys = ['transactionDate', 'purchaseType', 'wayNumber', 'partyId', 'itemName',

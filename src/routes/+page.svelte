@@ -173,7 +173,7 @@
 				<td class="td">{parties.byId.get(t.partyId)?.partyName ?? '—'}</td>
 				<td class="td">{t.itemName}</td>
 				<td class="td num">{formatKg(t.total)}</td>
-				<td class="td"><StatusBadge status={t.status} /></td>
+				<td class="td"><StatusBadge status={t.status} kind="entry" /></td>
 			</tr>
 		{/each}
 	{/snippet}

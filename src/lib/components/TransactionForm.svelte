@@ -1,7 +1,13 @@
 <script lang="ts">
 	import type { Party, TransactionFormValues } from '$lib/types';
 	import { PURCHASE_TYPE_OPTIONS, STATUS_OPTIONS } from '$lib/types';
-	import { KG_PER_BAG, calculateItemAmount, calculateTotalAmount, ratePerKg } from '$lib/utils/calculations';
+	import {
+		KG_PER_BAG,
+		billsLooseKg,
+		calculateItemAmount,
+		calculateTotalAmount,
+		ratePerKg
+	} from '$lib/utils/calculations';
 	import {
 		computeWeights,
 		validateTransaction,
@@ -53,13 +59,15 @@
 	let submitted = $state(false);
 	let busy = $state(false);
 
-	// Live calculation — same functions used again before saving.
-	const weights = $derived(computeWeights(v));
 	// The selected party decides whether the loose kg is billed. Until one is picked the
 	// preview assumes wholesale; the write path re-reads the type from the party record.
 	const selectedParty = $derived(parties.find((p) => p.id === v.partyId));
 	const partyType = $derived(selectedParty?.partyType ?? 'wholesale');
+	// Live calculation — same functions used again before saving.
+	const weights = $derived(computeWeights(v, partyType));
 	const result = $derived(validateTransaction(v, partyType));
+	// A wholesale party is not paid for the loose remainder, so it is left off the form.
+	const showLooseKg = $derived(billsLooseKg(partyType));
 
 	const money = $derived.by(() => {
 		const pricePerBag = v.price ?? 0;
@@ -206,8 +214,9 @@
 		</div>
 		{#if manual}
 			<p class="mx-5 mt-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-				Manual entry: nothing is calculated. Type the Total, Number of Bags and Loose Kg exactly as they
-					should be recorded — they do not have to agree with each other. Load and Empty are optional.
+				Manual entry: nothing is calculated. Type the Total, Number of Bags{#if showLooseKg} and Loose Kg{/if}
+					exactly as they should be recorded — they do not have to agree with each other. Load and Empty are
+					optional.
 			</p>
 		{/if}
 		<div class="grid grid-cols-1 gap-x-6 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -232,11 +241,13 @@
 					<input id="bagCount" type="number" inputmode="numeric" min="0" step="1" class="input {errors.bagCount ? 'input-error' : ''}" bind:value={v.bagCount} placeholder="e.g. 96" />
 					{@render err('bagCount')}
 				</div>
-				<div>
-					<label class="label" for="kg">Loose Kg {@render req()}</label>
-					<input id="kg" type="number" inputmode="decimal" min="0" step="any" class="input {errors.kg ? 'input-error' : ''}" bind:value={v.kg} placeholder="e.g. 48" />
-					{@render err('kg')}
-				</div>
+				{#if showLooseKg}
+					<div>
+						<label class="label" for="kg">Loose Kg {@render req()}</label>
+						<input id="kg" type="number" inputmode="decimal" min="0" step="any" class="input {errors.kg ? 'input-error' : ''}" bind:value={v.kg} placeholder="e.g. 48" />
+						{@render err('kg')}
+					</div>
+				{/if}
 			{:else}
 				<div>
 					<label class="label" for="total">Total (kg) <span class="font-normal text-slate-400">— Load − Empty</span></label>
@@ -246,10 +257,12 @@
 					<label class="label" for="bagCount">Number of Bags <span class="font-normal text-slate-400">— Total ÷ {KG_PER_BAG}</span></label>
 					<input id="bagCount" class="input-readonly" readonly tabindex="-1" value={weights.bagCount == null ? '' : formatNumber(weights.bagCount)} placeholder="Auto calculated" />
 				</div>
-				<div>
-					<label class="label" for="kg">Loose Kg <span class="font-normal text-slate-400">— the remainder</span></label>
-					<input id="kg" class="input-readonly" readonly tabindex="-1" value={weights.kg == null ? '' : formatNumber(weights.kg)} placeholder="Auto calculated" />
-				</div>
+				{#if showLooseKg}
+					<div>
+						<label class="label" for="kg">Loose Kg <span class="font-normal text-slate-400">— the remainder</span></label>
+						<input id="kg" class="input-readonly" readonly tabindex="-1" value={weights.kg == null ? '' : formatNumber(weights.kg)} placeholder="Auto calculated" />
+					</div>
+				{/if}
 			{/if}
 		</div>
 
@@ -267,7 +280,9 @@
 				<label class="label" for="price">Price per Bag (₹)</label>
 				<input id="price" type="number" inputmode="decimal" min="0" step="0.01" class="input {errors.price ? 'input-error' : ''}" bind:value={v.price} placeholder="e.g. 1500" />
 				{@render err('price')}
-				<p class="mt-1 text-xs text-slate-500">Loose Kg rate: {formatCurrency(money.rate)} per kg</p>
+				{#if showLooseKg}
+					<p class="mt-1 text-xs text-slate-500">Loose Kg rate: {formatCurrency(money.rate)} per kg</p>
+				{/if}
 			</div>
 			<div>
 				<label class="label" for="itemAmount">Item Amount (₹) <span class="font-normal text-slate-400">— calculated</span></label>
@@ -293,16 +308,12 @@
 						<dt class="text-slate-600">{formatNumber(weights.bagCount)} bags × {formatCurrency(v.price ?? 0)}</dt>
 						<dd class="font-medium text-slate-900">{money.bags == null ? '—' : formatCurrency(money.bags)}</dd>
 					</div>
-					<div class="flex justify-between px-4 py-2 {partyType === 'farmer' ? '' : 'text-slate-400'}">
-						<dt>{formatNumber(weights.kg)} kg × {formatCurrency(money.rate)}</dt>
-						<dd class="font-medium">
-							{#if partyType === 'farmer'}
-								{money.loose == null ? '—' : formatCurrency(money.loose)}
-							{:else}
-								Not billed
-							{/if}
-						</dd>
-					</div>
+					{#if showLooseKg}
+						<div class="flex justify-between px-4 py-2">
+							<dt class="text-slate-600">{formatNumber(weights.kg)} kg × {formatCurrency(money.rate)}</dt>
+							<dd class="font-medium text-slate-900">{money.loose == null ? '—' : formatCurrency(money.loose)}</dd>
+						</div>
+					{/if}
 					<div class="flex justify-between bg-slate-50/60 px-4 py-2">
 						<dt class="font-medium text-slate-700">Item Amount</dt>
 						<dd class="font-semibold text-slate-900">{money.item == null ? '—' : formatCurrency(money.item)}</dd>

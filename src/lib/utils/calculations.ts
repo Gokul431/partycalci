@@ -47,6 +47,25 @@ export function ratePerKg(pricePerBag: number): number {
 	return Math.floor(pricePerBag / KG_PER_BAG);
 }
 
+/**
+ * Whether the loose remainder counts for this party at all. Only a farmer is paid for it,
+ * so for a wholesale party it is neither recorded, shown on the entry form, nor printed.
+ * Every place that hides, zeroes or dashes the loose Kg asks this one question.
+ */
+export function billsLooseKg(partyType: PartyType): boolean {
+	return partyType === 'farmer';
+}
+
+/**
+ * The loose kg recorded against an entry. A wholesale party is never paid for it, so none
+ * is recorded for them and their documents print a dash instead of a figure. This does
+ * mean Bags × KG_PER_BAG no longer reconciles to Total on a wholesale entry — the
+ * remainder is deliberately dropped, not mislaid.
+ */
+export function storedKg(partyType: PartyType, kg: number): number {
+	return billsLooseKg(partyType) ? kg : 0;
+}
+
 /** Value of the goods. Wholesale pays for full bags only; a farmer is paid for the loose kg too. */
 export function calculateItemAmount(
 	partyType: PartyType,

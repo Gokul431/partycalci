@@ -25,7 +25,13 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { friendlyError } from '$lib/utils/errors';
 	import { formatDate } from '$lib/utils/dates';
-	import { formatCurrency, formatNumber, formatWayNumber } from '$lib/utils/format';
+	import {
+		entryStatusLabel,
+		formatCurrency,
+		formatNumber,
+		formatWayNumber,
+		looseKgDisplay
+	} from '$lib/utils/format';
 	import {
 		FILTER_DEBOUNCE_MS,
 		filtersFromUrl,
@@ -182,7 +188,7 @@
 		busy = true;
 		try {
 			await setTransactionStatus(target.id, next);
-			toast.success(`Entry ${formatWayNumber(target.wayNumber, target.purchaseType)} marked as ${next === 'active' ? 'Active' : 'Inactive'}.`);
+			toast.success(`Entry ${formatWayNumber(target.wayNumber, target.purchaseType)} marked as ${entryStatusLabel(next)}.`);
 			confirmOpen = false;
 			fetchPage(pageIndex);
 			fetchCount();
@@ -232,7 +238,7 @@
 			<!-- Inactive entries: faded row (actions stay full strength) + tag beside the way number. -->
 			<tr
 				class="group hover:bg-slate-50 {t.status === 'inactive' ? 'bg-slate-50/60 [&>td:not(:last-child)]:opacity-55' : ''}"
-				title={t.status === 'inactive' ? 'Inactive entry' : undefined}
+				title={t.status === 'inactive' ? 'Completed bill' : undefined}
 			>
 				<td class="td">
 					<a class="font-medium text-emerald-700 hover:underline" href="/received-from-party/{t.id}">{formatDate(t.transactionDate)}</a>
@@ -240,7 +246,7 @@
 				<td class="td">
 					<a class="font-medium text-slate-900 hover:underline" href="/received-from-party/{t.id}">{formatWayNumber(t.wayNumber, t.purchaseType)}</a>
 					{#if t.status === 'inactive'}
-						<span class="ml-1.5 rounded bg-slate-200 px-1.5 py-0.5 align-middle text-[10px] font-semibold tracking-wide text-slate-600 uppercase">Inactive</span>
+						<span class="ml-1.5 rounded bg-slate-200 px-1.5 py-0.5 align-middle text-[10px] font-semibold tracking-wide text-slate-600 uppercase">Completed</span>
 					{/if}
 				</td>
 				<td class="td">
@@ -250,7 +256,7 @@
 				<td class="td">{t.itemName}</td>
 				<td class="td num font-medium">{formatNumber(t.total)}</td>
 				<td class="td num">{formatNumber(t.bagCount)}</td>
-				<td class="td num font-medium">{formatNumber(t.kg)}</td>
+				<td class="td num font-medium">{looseKgDisplay(party?.partyType, t.kg, formatNumber)}</td>
 				<td class="td num">{formatCurrency(t.freightCharge)}</td>
 				<td class="td sticky right-0 group-hover:bg-slate-50 {t.status === 'inactive' ? 'bg-slate-50' : 'bg-white'}">
 					<div class="flex justify-end">
@@ -271,8 +277,8 @@
 									}
 								},
 								t.status === 'active'
-									? { label: 'Mark as Inactive', icon: 'ban', tone: 'danger', divider: true, onclick: () => askStatus(t) }
-									: { label: 'Mark as Active', icon: 'checkCircle', tone: 'success', divider: true, onclick: () => askStatus(t) }
+									? { label: 'Mark as Completed', icon: 'checkCircle', tone: 'success', divider: true, onclick: () => askStatus(t) }
+									: { label: 'Reopen as Pending', icon: 'refresh', divider: true, onclick: () => askStatus(t) }
 							]}
 						/>
 					</div>
@@ -310,9 +316,9 @@
 	bind:open={confirmOpen}
 	title={target?.status === 'active' ? 'Mark entry as Inactive?' : 'Mark entry as Active?'}
 	message={target?.status === 'active'
-		? `Way number ${target ? formatWayNumber(target.wayNumber, target.purchaseType) : ''} will be marked Inactive. The record is kept and can be restored later.`
-		: `Way number ${target ? formatWayNumber(target.wayNumber, target.purchaseType) : ''} will be marked Active again.`}
-	confirmLabel={target?.status === 'active' ? 'Mark as Inactive' : 'Mark as Active'}
+		? `Way number ${target ? formatWayNumber(target.wayNumber, target.purchaseType) : ''} will be marked Completed. The bill is settled; it can be reopened later.`
+		: `Way number ${target ? formatWayNumber(target.wayNumber, target.purchaseType) : ''} will be reopened as Pending.`}
+	confirmLabel={target?.status === 'active' ? 'Mark as Completed' : 'Reopen as Pending'}
 	tone={target?.status === 'active' ? 'danger' : 'primary'}
 	{busy}
 	onconfirm={toggleStatus}

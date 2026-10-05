@@ -5,6 +5,7 @@
 	import { session } from '$lib/stores/session.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { friendlyError } from '$lib/utils/errors';
+	import AccountDialog from './AccountDialog.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 
@@ -29,6 +30,7 @@
 
 	let busy = $state(false);
 	let confirmOpen = $state(false);
+	let accountOpen = $state(false);
 
 	async function signOut() {
 		busy = true;
@@ -121,6 +123,16 @@
 			<button
 				type="button"
 				class="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white disabled:opacity-50"
+				onclick={() => (accountOpen = true)}
+				disabled={busy}
+				title="Change email or password"
+				aria-label="Change email or password"
+			>
+				<Icon name="key" class="h-[18px] w-[18px]" />
+			</button>
+			<button
+				type="button"
+				class="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white disabled:opacity-50"
 				onclick={() => (confirmOpen = true)}
 				disabled={busy}
 				title="Sign out"
@@ -131,6 +143,8 @@
 		</div>
 	</div>
 </aside>
+
+<AccountDialog bind:open={accountOpen} />
 
 <ConfirmDialog
 	bind:open={confirmOpen}

@@ -1,4 +1,5 @@
-import type { PurchaseType } from '$lib/types';
+import type { PartyType, PurchaseType, Status } from '$lib/types';
+import { billsLooseKg } from './calculations';
 
 const numberFmt = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 3 });
 const currencyFmt = new Intl.NumberFormat('en-IN', {
@@ -51,4 +52,39 @@ export function purchaseTypeFromWayNumber(wayNumber: string): PurchaseType | nul
 export function formatWayNumber(wayNumber: string, purchaseType: string): string {
 	const base = wayNumberBase(wayNumber);
 	return base ? `${base}-${purchaseType === 'return' ? 'R' : 'P'}` : wayNumber;
+}
+
+/**
+ * An entry's status describes its bill, not the record: `active` means the bill is still
+ * pending, `inactive` means it has been completed. Parties share the `Status` type but
+ * mean something different by it — selectable for new entries or not — so they keep their
+ * own Active / Inactive wording. Defined once here so the two never drift apart.
+ */
+export function entryStatusLabel(status: Status): string {
+	return status === 'inactive' ? 'Completed' : 'Pending';
+}
+
+/** Shown wherever a party's loose remainder does not apply — on screen and in both PDFs. */
+export const LOOSE_KG_NONE = '-';
+
+/**
+ * The loose Kg as it should be shown. Only a farmer is paid for the remainder, so for a
+ * wholesale party it reads as a dash rather than as a weight of zero — which would look
+ * like a figure that had been measured.
+ *
+ * `partyType` is undefined only when no party record is in hand: the parties store has not
+ * loaded yet, or the record is gone. A party that was saved without a type still arrives as
+ * 'wholesale' (see toParty), so an undefined type is never a wholesale party — it is an
+ * unknown one, and no basis for claiming the remainder was not billed. The stored figure
+ * stands in that case, so a farmer's Kg never blinks to a dash while the store loads.
+ *
+ * Pass `format` to match the surrounding column; the screens want "48 kg", the PDFs the
+ * bare figure.
+ */
+export function looseKgDisplay(
+	partyType: PartyType | undefined,
+	kg: number,
+	format: (kg: number) => string = formatKg
+): string {
+	return partyType && !billsLooseKg(partyType) ? LOOSE_KG_NONE : format(kg);
 }

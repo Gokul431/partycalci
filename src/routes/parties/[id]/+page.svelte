@@ -11,7 +11,13 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { friendlyError } from '$lib/utils/errors';
 	import { formatDate, formatDateTime } from '$lib/utils/dates';
-	import { formatCurrency, formatKg, formatNumber, formatWayNumber } from '$lib/utils/format';
+	import {
+		formatCurrency,
+		formatKg,
+		formatNumber,
+		formatWayNumber,
+		looseKgDisplay
+	} from '$lib/utils/format';
 	import type { Transaction } from '$lib/types';
 
 	const id = $derived(page.params.id ?? '');
@@ -181,8 +187,8 @@
 					<td class="td"><a class="font-medium text-slate-900 hover:underline" href="/received-from-party/{t.id}">{formatWayNumber(t.wayNumber, t.purchaseType)}</a></td>
 					<td class="td">{t.itemName}</td>
 					<td class="td num">{formatKg(t.total)}</td>
-					<td class="td num">{formatKg(t.kg)}</td>
-					<td class="td"><StatusBadge status={t.status} /></td>
+					<td class="td num">{looseKgDisplay(party.partyType, t.kg)}</td>
+					<td class="td"><StatusBadge status={t.status} kind="entry" /></td>
 				</tr>
 			{/each}
 		{/snippet}

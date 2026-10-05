@@ -1,10 +1,12 @@
 import {
 	KG_PER_BAG,
+	billsLooseKg,
 	calculateBags,
 	calculateItemAmount,
 	calculateKg,
 	calculateTotal,
-	looseKg
+	looseKg,
+	storedKg
 } from './calculations';
 import { parseISODate } from './dates';
 import { formatWayNumber, purchaseTypeFromWayNumber } from './format';
@@ -78,8 +80,15 @@ type WeightField = 'load' | 'empty' | 'total' | 'bagCount' | 'kg';
  * Auto (default): everything derives from Load − Empty.
  * Manual (autoCalculate === false): nothing is derived — Total, Bags and Loose Kg are
  * all typed and only checked individually, so the three need not agree with each other.
+ *
+ * A wholesale party is not paid for the loose remainder, so it is not recorded for them:
+ * the Kg comes back as 0 in both modes and is never asked for. The default party type is
+ * the farmer, the case where every weight counts.
  */
-export function computeWeights(v: WeightInput): {
+export function computeWeights(
+	v: WeightInput,
+	partyType: PartyType = 'farmer'
+): {
 	total: number | null;
 	bagCount: number | null;
 	kg: number | null;
@@ -95,7 +104,8 @@ export function computeWeights(v: WeightInput): {
 
 		const total = v.total ?? null;
 		const bags = v.bagCount ?? null;
-		const kg = v.kg ?? null;
+		// Not billed, not shown on the form, so never required — whatever was typed is dropped.
+		const kg = billsLooseKg(partyType) ? (v.kg ?? null) : 0;
 		if (!isNum(total)) errors.total = 'Total is required.';
 		else if (total < 0) errors.total = 'Total must be 0 or more.';
 		if (!isNum(bags)) errors.bagCount = 'Number of bags is required.';
@@ -116,7 +126,12 @@ export function computeWeights(v: WeightInput): {
 
 	if (v.empty > v.load) errors.empty = EMPTY_GT_LOAD;
 	const total = calculateTotal(v.load, v.empty);
-	return { total, bagCount: calculateBags(total), kg: calculateKg(total), errors };
+	return {
+		total,
+		bagCount: calculateBags(total),
+		kg: storedKg(partyType, calculateKg(total)),
+		errors
+	};
 }
 
 function optionalAmount(
@@ -165,7 +180,7 @@ export function validateTransaction(
 	if (!itemName) errors.itemName = 'Item name is required.';
 	else if (itemName.length > 120) errors.itemName = 'Item name is too long (max 120).';
 
-	const w = computeWeights(v);
+	const w = computeWeights(v, partyType);
 	Object.assign(errors, w.errors);
 
 	const freightCharge = optionalAmount(v.freightCharge, 'freightCharge', 'Freight charge', errors);

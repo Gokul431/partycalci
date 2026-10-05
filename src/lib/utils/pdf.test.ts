@@ -35,7 +35,8 @@ function fixture() {
 				partyName: name,
 				place,
 				phoneNumber: phone,
-				partyType: 'wholesale',
+				// A farmer: their Kg is printed, so these widths cover the real figures.
+				partyType: 'farmer',
 				status: 'active',
 				createdAt: null,
 				updatedAt: null
@@ -299,7 +300,7 @@ describe('crore-scale amounts', () => {
 			partyName: 'Karthick',
 			place: 'KLU',
 			phoneNumber: '9626540553',
-			partyType: 'wholesale',
+			partyType: 'farmer',
 			status: 'active',
 			createdAt: null,
 			updatedAt: null
@@ -322,7 +323,8 @@ describe('crore-scale amounts', () => {
 				narration: '',
 				price: 99999,
 				amount: 999999999,
-				status: 'active',
+				// Completed is the widest Status word, so it must not shrink either.
+				status: 'inactive',
 				createdAt: null,
 				updatedAt: null
 			}
@@ -405,7 +407,7 @@ describe('no cell ever overflows its column', () => {
 			partyName: 'Karthick',
 			place: 'KLU',
 			phoneNumber: '9626540553',
-			partyType: 'wholesale',
+			partyType: 'farmer',
 			status: 'active',
 			createdAt: null,
 			updatedAt: null
@@ -528,5 +530,77 @@ describe('receipt cells never overflow either', () => {
 		]) {
 			expect(fits(value, 330.28, false), `value ${value}`).toBe(true);
 		}
+	});
+});
+
+describe('the Kg column follows the party type', () => {
+	/** Column 6 of the listing: Date, Way No, Particulars, Item, Total, Bag, Kg. */
+	const KG_COLUMN = 6;
+	/** Distinctive enough that finding it in the raw PDF cannot be a coincidence. */
+	const LOOSE_KG = 4873;
+
+	function oneRow(partyType: Party['partyType']) {
+		const partyById = new Map<string, Party>([
+			[
+				'p1',
+				{
+					id: 'p1',
+					partyName: 'Karthick',
+					place: 'KLU',
+					phoneNumber: '9626540553',
+					partyType,
+					status: 'active',
+					createdAt: null,
+					updatedAt: null
+				}
+			]
+		]);
+		const tx: Transaction = {
+			id: '1',
+			transactionDate: new Date('2026-08-01T00:00:00'),
+			purchaseType: 'purchase',
+			wayNumber: '74808',
+			partyId: 'p1',
+			itemName: 'DLX',
+			load: 10820,
+			empty: 4360,
+			autoCalculate: true,
+			total: 6460,
+			bagCount: 104,
+			kg: LOOSE_KG,
+			freightCharge: 500,
+			narration: '',
+			price: 1500,
+			amount: 156000,
+			status: 'active',
+			createdAt: null,
+			updatedAt: null
+		};
+		return { rows: [tx], partyById, party: partyById.get('p1') as Party, tx };
+	}
+
+	const kgCell = (built: unknown) =>
+		(
+			(built as { lastAutoTable: { body: { cells: Record<number, { text: string[] }> }[] } })
+				.lastAutoTable.body[0].cells[KG_COLUMN].text ?? []
+		).join('');
+
+	it('prints a dash for a wholesale party, who is not paid for the remainder', async () => {
+		const { rows, partyById } = oneRow('wholesale');
+		expect(kgCell(await buildVoucherListing(rows, partyById, FILTERS))).toBe('-');
+	});
+
+	it('prints the figure for a farmer, who is', async () => {
+		const { rows, partyById } = oneRow('farmer');
+		expect(kgCell(await buildVoucherListing(rows, partyById, FILTERS))).toBe(String(LOOSE_KG));
+	});
+
+	it('keeps the single receipt in step with the listing', async () => {
+		const farmer = oneRow('farmer');
+		const wholesale = oneRow('wholesale');
+		expect((await buildSingleReceipt(farmer.tx, farmer.party)).output()).toContain(String(LOOSE_KG));
+		expect((await buildSingleReceipt(wholesale.tx, wholesale.party)).output()).not.toContain(
+			String(LOOSE_KG)
+		);
 	});
 });

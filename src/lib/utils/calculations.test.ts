@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
 	KG_PER_BAG,
+	billsLooseKg,
 	calculateBags,
 	calculateItemAmount,
 	calculateKg,
 	calculateTotal,
 	calculateTotalAmount,
-	ratePerKg
+	ratePerKg,
+	storedKg
 } from './calculations';
 import { EMPTY_GT_LOAD, computeWeights, validateParty, validateTransaction } from './validation';
 import type { PartyInput, TransactionFormValues } from '$lib/types';
@@ -102,7 +104,7 @@ describe('computeWeights', () => {
 
 describe('validateTransaction', () => {
 	it('stores the derived weights', () => {
-		const r = validateTransaction(base, 'wholesale');
+		const r = validateTransaction(base, 'farmer');
 		expect(r.ok).toBe(true);
 		if (r.ok) {
 			expect(r.data.total).toBe(6460);
@@ -166,7 +168,7 @@ describe('billing', () => {
 		const asFarmer = validateTransaction(entry, 'farmer');
 		const asWholesale = validateTransaction(entry, 'wholesale');
 		expect(asFarmer.ok && asFarmer.data).toMatchObject({ bagCount: 15, kg: 22, amount: 23028 });
-		expect(asWholesale.ok && asWholesale.data).toMatchObject({ bagCount: 15, kg: 22, amount: 22500 });
+		expect(asWholesale.ok && asWholesale.data).toMatchObject({ bagCount: 15, kg: 0, amount: 22500 });
 	});
 });
 
@@ -211,7 +213,7 @@ describe('manual weights (auto-calculate off)', () => {
 		expect(computeWeights(manual)).toMatchObject({ total: 6000, bagCount: 96, kg: 48, errors: {} });
 	});
 	it('makes Load and Empty optional', () => {
-		const r = validateTransaction({ ...base, ...manual }, 'wholesale');
+		const r = validateTransaction({ ...base, ...manual }, 'farmer');
 		expect(r.ok).toBe(true);
 		if (r.ok) expect(r.data).toMatchObject({ load: null, empty: null, autoCalculate: false, kg: 48 });
 	});
@@ -230,6 +232,48 @@ describe('manual weights (auto-calculate off)', () => {
 	});
 	it('still rejects a negative Loose Kg', () => {
 		expect(computeWeights({ ...manual, kg: -5 }).errors.kg).toBeDefined();
+	});
+});
+
+describe('a wholesale party has no loose Kg', () => {
+	const manual = { load: null, empty: null, autoCalculate: false, total: 6000, bagCount: 96, kg: 48 };
+
+	it('bills the loose remainder for a farmer only', () => {
+		expect(billsLooseKg('farmer')).toBe(true);
+		expect(billsLooseKg('wholesale')).toBe(false);
+	});
+
+	it('records nothing for wholesale and the full remainder for a farmer', () => {
+		expect(storedKg('wholesale', 12)).toBe(0);
+		expect(storedKg('farmer', 12)).toBe(12);
+	});
+
+	it('drops the remainder from the derived weights, keeping Total and Bags', () => {
+		expect(computeWeights(base, 'wholesale')).toMatchObject({ total: 6460, bagCount: 104, kg: 0 });
+		expect(computeWeights(base, 'farmer')).toMatchObject({ total: 6460, bagCount: 104, kg: 12 });
+	});
+
+	it('stores a zero Kg against the entry', () => {
+		const r = validateTransaction(base, 'wholesale');
+		expect(r.ok && r.data.kg).toBe(0);
+		expect(r.ok && r.data.total).toBe(6460);
+	});
+
+	it('never asks for a Kg the form does not show, even in manual entry', () => {
+		// The field is hidden for a wholesale party, so a blank one cannot block the save.
+		const r = computeWeights({ ...manual, kg: null }, 'wholesale');
+		expect(r).toMatchObject({ total: 6000, bagCount: 96, kg: 0, errors: {} });
+		expect(computeWeights({ ...manual, kg: null }, 'farmer').errors.kg).toBeDefined();
+	});
+
+	it('ignores a Kg left behind by switching the party to wholesale', () => {
+		const r = validateTransaction({ ...base, ...manual, kg: -5 }, 'wholesale');
+		expect(r.ok && r.data.kg).toBe(0);
+	});
+
+	it('leaves the amount alone — wholesale was never paid for the remainder', () => {
+		const r = validateTransaction({ ...base, load: 3452, empty: 2500, price: 1500 }, 'wholesale');
+		expect(r.ok && r.data.amount).toBe(22500);
 	});
 });
 

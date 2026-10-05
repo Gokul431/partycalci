@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatWayNumber, purchaseTypeFromWayNumber, wayNumberBase } from './format';
+import {
+	LOOSE_KG_NONE,
+	entryStatusLabel,
+	formatWayNumber,
+	looseKgDisplay,
+	purchaseTypeFromWayNumber,
+	wayNumberBase
+} from './format';
 
 describe('formatWayNumber', () => {
 	it('adds the suffix from the type', () => {
@@ -52,5 +59,44 @@ describe('purchaseTypeFromWayNumber', () => {
 				`${base}-${typed === 'return' ? 'R' : 'P'}`
 			);
 		}
+	});
+});
+
+describe('entryStatusLabel', () => {
+	it('reads an inactive entry as a completed bill', () => {
+		expect(entryStatusLabel('inactive')).toBe('Completed');
+	});
+	it('reads an active entry as a pending bill', () => {
+		expect(entryStatusLabel('active')).toBe('Pending');
+	});
+	it('never leaves the status blank', () => {
+		// The old listing printed nothing for a live entry, so the column read empty on
+		// every normal voucher. Both states must now print a word.
+		for (const status of ['active', 'inactive'] as const) {
+			expect(entryStatusLabel(status)).not.toBe('');
+		}
+	});
+});
+
+describe('looseKgDisplay', () => {
+	it('shows a farmer the real figure, in the format of the surrounding column', () => {
+		expect(looseKgDisplay('farmer', 48)).toBe('48 kg');
+		expect(looseKgDisplay('farmer', 48, String)).toBe('48');
+	});
+
+	it('shows a farmer a genuine zero remainder as a figure, not a dash', () => {
+		// A Total that divides exactly into bags: measured, and billed at nothing.
+		expect(looseKgDisplay('farmer', 0)).toBe('0 kg');
+	});
+
+	it('dashes a wholesale party, who is not paid for the remainder', () => {
+		expect(looseKgDisplay('wholesale', 48)).toBe(LOOSE_KG_NONE);
+		expect(looseKgDisplay('wholesale', 0, String)).toBe(LOOSE_KG_NONE);
+	});
+
+	it('keeps the figure when no party record is in hand', () => {
+		// The parties store loads separately from the rows. Dashing here would blink a
+		// farmer's Kg away on every page load, and claim something we cannot know.
+		expect(looseKgDisplay(undefined, 48)).toBe('48 kg');
 	});
 });

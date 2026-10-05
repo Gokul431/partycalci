@@ -11,8 +11,15 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { friendlyError } from '$lib/utils/errors';
 	import { formatDate, formatDateTime } from '$lib/utils/dates';
-	import { formatCurrency, formatKg, formatNumber, formatWayNumber, purchaseTypeLabel } from '$lib/utils/format';
-	import { KG_PER_BAG, calculateTotalAmount } from '$lib/utils/calculations';
+	import {
+		formatCurrency,
+		formatKg,
+		formatNumber,
+		formatWayNumber,
+		looseKgDisplay,
+		purchaseTypeLabel
+	} from '$lib/utils/format';
+	import { KG_PER_BAG, billsLooseKg, calculateTotalAmount } from '$lib/utils/calculations';
 	import type { Transaction } from '$lib/types';
 
 	const id = $derived(page.params.id ?? '');
@@ -37,6 +44,8 @@
 	});
 
 	const party = $derived(tx ? parties.byId.get(tx.partyId) : undefined);
+	// A wholesale party is not paid for the loose remainder, so none was recorded for them.
+	const showLooseKg = $derived(billsLooseKg(party?.partyType ?? 'wholesale'));
 
 	let confirmOpen = $state(false);
 	let busy = $state(false);
@@ -81,7 +90,7 @@
 		backHref="/received-from-party"
 		backLabel="Back to List"
 	>
-		{#snippet badge()}<StatusBadge status={tx?.status ?? 'active'} />{/snippet}
+		{#snippet badge()}<StatusBadge status={tx?.status ?? "active"} kind="entry" />{/snippet}
 		{#snippet actions()}
 			{#if tx}
 				<button type="button" class="btn-secondary" onclick={() => tx && downloadSingleReceipt(tx, party)}>
@@ -89,14 +98,16 @@
 				</button>
 			{/if}
 			<button type="button" class="btn-secondary" onclick={() => (confirmOpen = true)}>
-				<Icon name="power" />{tx?.status === 'active' ? 'Cancel Entry' : 'Restore Entry'}
+				<Icon name={tx?.status === 'active' ? 'checkCircle' : 'refresh'} />{tx?.status === 'active'
+					? 'Mark as Completed'
+					: 'Reopen as Pending'}
 			</button>
 			<a href="/received-from-party/{tx?.id}/edit" class="btn-primary"><Icon name="edit" />Edit</a>
 		{/snippet}
 	</PageHeader>
 
 	<div class="card mb-4 grid grid-cols-2 divide-slate-200 lg:grid-cols-4 lg:divide-x">
-		{#each [{ label: 'Total Weight', value: formatKg(tx.total) }, { label: 'Number of Bags', value: formatNumber(tx.bagCount) }, { label: 'Loose Kg', value: formatKg(tx.kg) }, { label: 'Total Amount', value: formatCurrency(calculateTotalAmount(tx.amount, tx.freightCharge)) }] as s (s.label)}
+		{#each [{ label: 'Total Weight', value: formatKg(tx.total) }, { label: 'Number of Bags', value: formatNumber(tx.bagCount) }, { label: 'Loose Kg', value: looseKgDisplay(party?.partyType, tx.kg) }, { label: 'Total Amount', value: formatCurrency(calculateTotalAmount(tx.amount, tx.freightCharge)) }] as s (s.label)}
 			<div class="px-5 py-4">
 				<div class="text-xs font-semibold tracking-wide text-slate-500 uppercase">{s.label}</div>
 				<div class="mt-1 text-xl font-bold text-slate-900">{s.value}</div>
@@ -140,11 +151,16 @@
 				{@render item('Empty', formatKg(tx.empty))}
 				{@render item(tx.autoCalculate ? 'Total (Load − Empty)' : 'Total (entered)', formatKg(tx.total), true)}
 				{@render item('Number of Bags', formatNumber(tx.bagCount))}
-				{@render item('Loose Kg', formatKg(tx.kg), true)}
+				{@render item('Loose Kg', looseKgDisplay(party?.partyType, tx.kg), true)}
 			</dl>
 			<p class="border-t border-slate-100 px-5 py-2.5 text-xs text-slate-500 tabular-nums">
-				{formatNumber(tx.total)} kg = {formatNumber(tx.bagCount)} bag{tx.bagCount === 1 ? '' : 's'}
-				× {KG_PER_BAG} + {formatNumber(tx.kg)} kg
+				{#if showLooseKg}
+					{formatNumber(tx.total)} kg = {formatNumber(tx.bagCount)} bag{tx.bagCount === 1 ? '' : 's'}
+					× {KG_PER_BAG} + {formatNumber(tx.kg)} kg
+				{:else}
+					{formatNumber(tx.total)} kg billed as {formatNumber(tx.bagCount)} bag{tx.bagCount === 1 ? '' : 's'}
+					× {KG_PER_BAG} kg — a wholesale party is not paid for the loose remainder.
+				{/if}
 			</p>
 		</section>
 
@@ -157,7 +173,7 @@
 				{@render item('Total Amount', formatCurrency(calculateTotalAmount(tx.amount, tx.freightCharge)), true)}
 				<div>
 					<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Status</dt>
-					<dd class="mt-1"><StatusBadge status={tx.status} /></dd>
+					<dd class="mt-1"><StatusBadge status={tx.status} kind="entry" /></dd>
 				</div>
 				<div class="col-span-2 md:col-span-4">
 					<dt class="text-xs font-medium tracking-wide text-slate-500 uppercase">Narration</dt>
@@ -171,12 +187,12 @@
 
 	<ConfirmDialog
 		bind:open={confirmOpen}
-		title={tx.status === 'active' ? 'Cancel this entry?' : 'Restore this entry?'}
+		title={tx.status === 'active' ? 'Mark this bill as completed?' : 'Reopen this bill?'}
 		message={tx.status === 'active'
-			? 'The entry will be marked Inactive. The record is kept and can be restored later.'
-			: 'The entry will be marked Active again.'}
-		confirmLabel={tx.status === 'active' ? 'Cancel Entry' : 'Restore Entry'}
-		tone={tx.status === 'active' ? 'danger' : 'primary'}
+			? 'The bill will be marked Completed. It can be reopened later if needed.'
+			: 'The bill will go back to Pending.'}
+		confirmLabel={tx.status === 'active' ? 'Mark as Completed' : 'Reopen as Pending'}
+		tone="primary"
 		{busy}
 		onconfirm={toggleStatus}
 	/>
